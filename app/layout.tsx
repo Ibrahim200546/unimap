@@ -7,6 +7,10 @@ export const metadata: Metadata = {
   title: "UniMap TDK - University Navigation",
   description:
     "Interactive university navigation app with indoor floor plans and outdoor routing for students.",
+  icons: {
+    icon: [{ url: "/favicon.svg", type: "image/svg+xml" }],
+    shortcut: "/favicon.ico",
+  },
 };
 
 export const viewport: Viewport = {
