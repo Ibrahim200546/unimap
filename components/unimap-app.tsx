@@ -785,12 +785,12 @@ export default function UniMapApp() {
     <div className="min-h-screen bg-background text-foreground">
       <div
         ref={gridRef}
-        className="grid min-h-screen lg:grid-cols-[390px_minmax(0,1fr)]"
+        className="grid min-h-screen lg:h-[100dvh] lg:grid-cols-[390px_minmax(0,1fr)] lg:overflow-hidden"
         style={gridStyle}
       >
-        <aside className="relative border-b border-border bg-background/95 px-4 py-4 backdrop-blur lg:border-b-0 lg:border-r lg:px-5 lg:py-5 group/sidebar">
-          <div className="flex h-full flex-col gap-4">
-            <div className="rounded-[28px] border border-border bg-card p-5 shadow-sm">
+        <aside className="relative border-b border-border bg-background/95 px-4 py-4 backdrop-blur lg:min-h-0 lg:border-b-0 lg:border-r lg:px-5 lg:py-5 group/sidebar">
+          <div className="flex h-full min-h-0 flex-col gap-3 overflow-y-auto pr-1 lg:pr-2">
+            <div className="rounded-[28px] border border-border bg-card p-4 shadow-sm">
               <p className="text-xs uppercase tracking-[0.24em] text-primary">{outdoorCopy.universityTitle}</p>
               <h1 className="mt-3 text-xl font-semibold">{text(UNIVERSITY.name, locale)}</h1>
               <p className="mt-2 text-sm text-muted-foreground">{outdoorCopy.universitySubtitle}</p>
@@ -842,7 +842,7 @@ export default function UniMapApp() {
                   type="button"
                   onClick={() => setPanel(id)}
                   className={cn(
-                    "rounded-2xl px-4 py-3 text-left text-sm font-medium transition-colors",
+                    "rounded-2xl px-4 py-2.5 text-left text-sm font-medium transition-colors",
                     panel === id
                       ? "bg-primary text-primary-foreground"
                       : "border border-border bg-card hover:bg-muted"
@@ -854,7 +854,7 @@ export default function UniMapApp() {
               ))}
             </div>
 
-            <div className="min-h-0 flex-1 overflow-y-auto pr-1">{renderPanel()}</div>
+            <div className="min-h-0 flex-1 pb-6">{renderPanel()}</div>
           </div>
 
           {isDesktop ? (
@@ -881,7 +881,7 @@ export default function UniMapApp() {
           ) : null}
         </aside>
 
-        <main className="p-4 lg:p-6">
+        <main className="p-4 lg:min-h-0 lg:p-6">
           <div className="relative h-full min-h-[560px] overflow-hidden rounded-[34px] border border-border bg-card shadow-2xl">
             {isIndoor ? (
               <IndoorMap

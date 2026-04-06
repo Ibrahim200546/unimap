@@ -32,6 +32,7 @@ export default function OutdoorMap({
   const tileLayerRef = useRef<any>(null);
   const siteLayerRef = useRef<any>(null);
   const siteMarkersRef = useRef<Map<string, any>>(new Map());
+  const routeCacheRef = useRef<Map<string, [number, number][]>>(new Map());
 
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return;
@@ -140,6 +141,8 @@ export default function OutdoorMap({
   }, [selectedSiteId]);
 
   useEffect(() => {
+    let cancelled = false;
+
     async function updateUserMarker() {
       if (!mapRef.current) return;
       const leaflet = await import("leaflet");
@@ -198,20 +201,27 @@ export default function OutdoorMap({
       points.push([userLat, userLng]);
 
       if (targetSite) {
-        routeLineRef.current = leaflet
-          .polyline(
-            [
-              [userLat, userLng],
-              [targetSite.lat!, targetSite.lng!],
-            ],
-            {
+        const routePoints = await getRoadRoute({
+          userLat,
+          userLng,
+          targetLat: targetSite.lat!,
+          targetLng: targetSite.lng!,
+          cache: routeCacheRef.current,
+          cacheKey: `${selectedSiteId}:${userLat.toFixed(4)}:${userLng.toFixed(4)}`,
+        });
+
+        if (!cancelled) {
+          routeLineRef.current = leaflet
+            .polyline(routePoints, {
               color: "hsl(210 70% 45%)",
               weight: 4,
-              opacity: 0.72,
+              opacity: 0.82,
               dashArray: "10 8",
-            }
-          )
-          .addTo(map);
+            })
+            .addTo(map);
+
+          points.push(...routePoints);
+        }
       }
 
       if (points.length > 1) {
@@ -221,6 +231,9 @@ export default function OutdoorMap({
     }
 
     updateUserMarker();
+    return () => {
+      cancelled = true;
+    };
   }, [selectedSiteId, sites, userLat, userLng]);
 
   return (
@@ -305,4 +318,46 @@ function escapeHtml(value: string) {
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#39;");
+}
+
+async function getRoadRoute({
+  userLat,
+  userLng,
+  targetLat,
+  targetLng,
+  cache,
+  cacheKey,
+}: {
+  userLat: number;
+  userLng: number;
+  targetLat: number;
+  targetLng: number;
+  cache: Map<string, [number, number][]>;
+  cacheKey: string;
+}) {
+  const cached = cache.get(cacheKey);
+  if (cached) return cached;
+
+  try {
+    const response = await fetch(
+      `https://router.project-osrm.org/route/v1/driving/${userLng},${userLat};${targetLng},${targetLat}?overview=full&geometries=geojson`
+    );
+    const data = await response.json();
+    const coordinates = data?.routes?.[0]?.geometry?.coordinates;
+
+    if (Array.isArray(coordinates) && coordinates.length > 1) {
+      const route = coordinates.map(([lng, lat]: [number, number]) => [lat, lng] as [number, number]);
+      cache.set(cacheKey, route);
+      return route;
+    }
+  } catch {
+    // Fall back to a straight segment if the routing service is unavailable.
+  }
+
+  const fallback: [number, number][] = [
+    [userLat, userLng],
+    [targetLat, targetLng],
+  ];
+  cache.set(cacheKey, fallback);
+  return fallback;
 }
