@@ -7,6 +7,7 @@ import {
   Bell,
   BookOpenText,
   Building2,
+  CalendarClock,
   ExternalLink,
   Globe2,
   Moon,
@@ -23,6 +24,7 @@ import IndoorMap from "@/components/indoor-map";
 import InfoCard from "@/components/info-card";
 import OutdoorMap from "@/components/outdoor-map";
 import SearchBar from "@/components/search-bar";
+import StudentSchedulePanel from "@/components/student-schedule-panel";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import {
@@ -44,7 +46,7 @@ import { buildRoute, estimateWalkingTime, pixelsToMeters } from "@/lib/pathfindi
 import { APP_COPY } from "@/lib/unimap-copy";
 import { cn } from "@/lib/utils";
 
-type Panel = "navigator" | "places" | "services" | "details";
+type Panel = "navigator" | "schedule" | "places" | "services" | "details";
 type Mode = "outdoor" | "indoor" | "route";
 type RouteProfile = "standard" | "accessible";
 type Point = { x: number; y: number };
@@ -62,6 +64,7 @@ type RoutePlan = {
 
 const PANEL_META = [
   { id: "navigator" as const, icon: Route },
+  { id: "schedule" as const, icon: CalendarClock },
   { id: "places" as const, icon: BookOpenText },
   { id: "services" as const, icon: Bell },
   { id: "details" as const, icon: PanelsTopLeft },
@@ -251,6 +254,10 @@ export default function UniMapApp() {
 
   const copy = APP_COPY[locale];
   const outdoorCopy = OUTDOOR_COPY[locale];
+  const panelLabels = {
+    ...copy.panels,
+    schedule: locale === "ru" ? "Расписание" : "Кесте",
+  };
   const activeTheme = resolvedTheme === "dark" ? "dark" : "light";
   const isIndoor = mode !== "outdoor";
   const floorData = getFloorById(currentFloor);
@@ -760,6 +767,10 @@ export default function UniMapApp() {
       );
     }
 
+    if (panel === "schedule") {
+      return <StudentSchedulePanel locale={locale} />;
+    }
+
     if (panel === "services") {
       return (
         <div className="space-y-4">
@@ -849,7 +860,7 @@ export default function UniMapApp() {
                   )}
                 >
                   <Icon className="mr-2 inline h-4 w-4" />
-                  {copy.panels[id]}
+                  {panelLabels[id]}
                 </button>
               ))}
             </div>
