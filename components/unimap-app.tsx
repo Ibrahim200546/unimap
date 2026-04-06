@@ -54,6 +54,7 @@ import {
 } from "@/lib/building-data";
 import { NAVIGATION_COLLECTIONS } from "@/lib/campus-data";
 import { CAMPUS_SITES, getCampusSiteById, type CampusSite } from "@/lib/campus-sites";
+import type { CampusTransitMapOverlay } from "@/lib/campus-transit";
 import { estimateOutdoorWalkingTime, haversineDistance } from "@/lib/geo-utils";
 import { text, type Locale } from "@/lib/i18n";
 import { buildRoute, estimateWalkingTime, pixelsToMeters } from "@/lib/pathfinding";
@@ -325,6 +326,7 @@ export default function UniMapApp() {
   const [routePlan, setRoutePlan] = useState<RoutePlan | null>(null);
   const [collectionId, setCollectionId] = useState(NAVIGATION_COLLECTIONS[0]?.id ?? "");
   const [activeOutdoorSiteId, setActiveOutdoorSiteId] = useState(CAMPUS_SITES[0]?.id ?? "");
+  const [transitOverlay, setTransitOverlay] = useState<CampusTransitMapOverlay | null>(null);
   const [userLat, setUserLat] = useState<number | null>(null);
   const [userLng, setUserLng] = useState<number | null>(null);
   const [userAccuracy, setUserAccuracy] = useState<number | null>(null);
@@ -544,7 +546,14 @@ export default function UniMapApp() {
     }
   }, [activeOutdoorSite?.indoorAvailable, distanceToActiveSite, manualIndoor, mode]);
 
+  useEffect(() => {
+    if (transitOverlay && transitOverlay.target.siteId !== activeOutdoorSiteId) {
+      setTransitOverlay(null);
+    }
+  }, [activeOutdoorSiteId, transitOverlay]);
+
   const focusRoom = useCallback((room: Room) => {
+    setTransitOverlay(null);
     setManualIndoor(true);
     setMode("indoor");
     setCurrentFloor(room.floor);
@@ -555,6 +564,7 @@ export default function UniMapApp() {
 
   const openIndoorFromSite = useCallback(
     (site: CampusSite) => {
+      setTransitOverlay(null);
       if (site.linkedRoomId) {
         const linkedRoom = getRoomById(site.linkedRoomId);
         if (linkedRoom) {
@@ -586,6 +596,7 @@ export default function UniMapApp() {
 
   const buildRouteTo = useCallback(
     (room: Room) => {
+      setTransitOverlay(null);
       const start = routeStart ?? getDefaultStartContext(currentFloor, locale);
       setRouteStart(start);
       const plan = createRoutePlan({
@@ -605,6 +616,21 @@ export default function UniMapApp() {
     },
     [currentFloor, locale, routeProfile, routeStart]
   );
+
+  const showTransitOverlay = useCallback((overlay: CampusTransitMapOverlay | null) => {
+    setTransitOverlay(overlay);
+
+    if (!overlay) return;
+
+    setActiveOutdoorSiteId(overlay.target.siteId);
+    setRoutePlan(null);
+    setRouteDestination(null);
+    setSelectedRoom(null);
+    setHighlightedRoom(null);
+    setManualIndoor(false);
+    setMode("outdoor");
+    setPanel("services");
+  }, []);
 
   const nudgeMobileSheet = useCallback(
     (direction: "up" | "down") => {
@@ -1187,6 +1213,7 @@ export default function UniMapApp() {
             userLat={userLat}
             userLng={userLng}
             onSelectOutdoorSite={setActiveOutdoorSiteId}
+            onTransitOverlayChange={showTransitOverlay}
           />
         </div>
       );
@@ -1343,6 +1370,7 @@ export default function UniMapApp() {
                 userLng={userLng}
                 userAccuracy={userAccuracy}
                 externalMapService={externalMapService}
+                transitOverlay={transitOverlay}
                 onSiteSelect={setActiveOutdoorSiteId}
               />
             )}
@@ -1465,14 +1493,29 @@ export default function UniMapApp() {
                       <span className="h-3 w-3 rounded-full bg-[hsl(var(--map-route))]" />
                       {copy.userLegend}
                     </span>
-                    <span className="inline-flex items-center gap-2">
-                      <span className="h-3 w-3 rounded-full bg-primary" />
-                      {outdoorCopy.activeSite}
-                    </span>
-                    <span className="inline-flex items-center gap-2">
-                      <span className="h-3 w-3 rounded-full bg-muted-foreground" />
-                      {outdoorCopy.sitesTitle}
-                    </span>
+                    {transitOverlay ? (
+                      <>
+                        <span className="inline-flex items-center gap-2">
+                          <span className="h-1.5 w-8 rounded-full bg-[#d94c1a]" />
+                          {locale === "ru" ? "Маршрут автобуса" : "Автобус маршруты"}
+                        </span>
+                        <span className="inline-flex items-center gap-2">
+                          <span className="h-3 w-3 rounded-full bg-[#f59e0b]" />
+                          {locale === "ru" ? "Автобусы" : "Автобустар"}
+                        </span>
+                      </>
+                    ) : (
+                      <>
+                        <span className="inline-flex items-center gap-2">
+                          <span className="h-3 w-3 rounded-full bg-primary" />
+                          {outdoorCopy.activeSite}
+                        </span>
+                        <span className="inline-flex items-center gap-2">
+                          <span className="h-3 w-3 rounded-full bg-muted-foreground" />
+                          {outdoorCopy.sitesTitle}
+                        </span>
+                      </>
+                    )}
                   </div>
                 )}
               </div>

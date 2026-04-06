@@ -48,6 +48,22 @@ export interface CampusTransitOption {
   legs: CampusTransitLeg[];
 }
 
+export interface CampusTransitMapOverlay {
+  source: {
+    lat: number;
+    lng: number;
+    label: string;
+  };
+  target: {
+    siteId: string;
+    lat: number;
+    lng: number;
+    label: string;
+  };
+  option: CampusTransitOption;
+  updatedAt: string;
+}
+
 export interface CampusTransitResponse {
   provider: "infobus";
   cityId: number;

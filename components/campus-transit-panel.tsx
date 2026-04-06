@@ -12,10 +12,12 @@ import {
   Route,
 } from "lucide-react";
 
-import CampusTransitLiveMap from "@/components/campus-transit-live-map";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import type { CampusTransitOption, CampusTransitResponse } from "@/lib/campus-transit";
+import type {
+  CampusTransitMapOverlay,
+  CampusTransitResponse,
+} from "@/lib/campus-transit";
 import type { CampusSite } from "@/lib/campus-sites";
 import { estimateOutdoorWalkingTime, haversineDistance } from "@/lib/geo-utils";
 import type { Locale } from "@/lib/i18n";
@@ -28,6 +30,7 @@ interface CampusTransitPanelProps {
   userLat: number | null;
   userLng: number | null;
   onTargetSiteChange: (siteId: string) => void;
+  onTransitOverlayChange: (overlay: CampusTransitMapOverlay | null) => void;
 }
 
 type SourceChoice = "__user__" | string;
@@ -63,7 +66,6 @@ const TRANSIT_COPY = {
     updated: "Обновлено",
     oneTransfer: "1 пересадка",
     manyTransfers: "пересадки",
-    liveMap: "Реалтайм на карте",
     busesNow: "Автобусы рядом сейчас",
     busCount: "на линии",
     selectedRoute: "Выбранный маршрут",
@@ -72,7 +74,10 @@ const TRANSIT_COPY = {
     speed: "Скорость",
     online: "На линии",
     offline: "Оффлайн",
-    chooseRoute: "Нажмите на вариант ниже, чтобы посмотреть живую карту маршрута.",
+    chooseRoute: "Нажмите на вариант ниже, чтобы выбрать маршрут, который будет показан на основной карте.",
+    showOnMap: "Показать",
+    shownOnMap: "Показано на основной карте",
+    showHint: "Кнопка покажет маршрут и живые автобусы на основной карте справа.",
   },
   kk: {
     title: "Корпустар арасындағы көлік",
@@ -104,7 +109,6 @@ const TRANSIT_COPY = {
     updated: "Жаңартылды",
     oneTransfer: "1 ауысу",
     manyTransfers: "ауысу",
-    liveMap: "Картадағы реалтайм",
     busesNow: "Қазір жақын автобустар",
     busCount: "желіде",
     selectedRoute: "Таңдалған маршрут",
@@ -113,11 +117,14 @@ const TRANSIT_COPY = {
     speed: "Жылдамдық",
     online: "Желіде",
     offline: "Оффлайн",
-    chooseRoute: "Төмендегі нұсқаны басып, тірі картаны қараңыз.",
+    chooseRoute: "Төмендегі нұсқаны басып, негізгі картада көрсетілетін маршрутты таңдаңыз.",
+    showOnMap: "Көрсету",
+    shownOnMap: "Негізгі картада көрсетілді",
+    showHint: "Батырма негізгі картада маршрут пен тірі автобустарды көрсетеді.",
   },
 } as const;
 
-function formatMeters(meters: number, _locale: Locale) {
+function formatMeters(meters: number) {
   if (meters < 1000) {
     return `${Math.round(meters)} м`;
   }
@@ -150,6 +157,7 @@ export default function CampusTransitPanel({
   userLat,
   userLng,
   onTargetSiteChange,
+  onTransitOverlayChange,
 }: CampusTransitPanelProps) {
   const copy = TRANSIT_COPY[locale];
   const campusPoints = useMemo(
@@ -169,6 +177,7 @@ export default function CampusTransitPanel({
   const [error, setError] = useState<string | null>(null);
   const [refreshNonce, setRefreshNonce] = useState(0);
   const [selectedOptionId, setSelectedOptionId] = useState<string | null>(null);
+  const [isShownOnMap, setIsShownOnMap] = useState(false);
 
   useEffect(() => {
     setTargetSiteId(activeTargetSiteId);
@@ -197,6 +206,13 @@ export default function CampusTransitPanel({
     sourcePoint && targetSite
       ? haversineDistance(sourcePoint.lat, sourcePoint.lng, targetSite.lat, targetSite.lng) < 180
       : false;
+
+  useEffect(() => {
+    setIsShownOnMap(false);
+    onTransitOverlayChange(null);
+  }, [sourceChoice, targetSiteId, onTransitOverlayChange]);
+
+  useEffect(() => () => onTransitOverlayChange(null), [onTransitOverlayChange]);
 
   useEffect(() => {
     if (!sourcePoint || !targetSite || samePoint) {
@@ -267,6 +283,34 @@ export default function CampusTransitPanel({
   const topOption = data?.options[0] ?? null;
   const selectedOption =
     data?.options.find((option) => option.id === selectedOptionId) ?? topOption ?? null;
+
+  useEffect(() => {
+    if (!isShownOnMap || !selectedOption || !sourcePoint || !targetSite || !data || samePoint) {
+      return;
+    }
+
+    onTransitOverlayChange({
+      source: sourcePoint,
+      target: {
+        siteId: targetSite.id,
+        lat: targetSite.lat,
+        lng: targetSite.lng,
+        label: text(targetSite.name, locale),
+      },
+      option: selectedOption,
+      updatedAt: data.updatedAt,
+    });
+  }, [
+    data,
+    isShownOnMap,
+    locale,
+    onTransitOverlayChange,
+    samePoint,
+    selectedOption,
+    sourcePoint,
+    targetSite,
+  ]);
+
   const infobusLink =
     sourcePoint && targetSite
       ? `https://infobus.kz/cities/2/pathsbwpoints?sourceLat=${sourcePoint.lat}&sourceLng=${sourcePoint.lng}&targetLat=${targetSite.lat}&targetLng=${targetSite.lng}`
@@ -347,6 +391,26 @@ export default function CampusTransitPanel({
               ))}
             </div>
           </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              type="button"
+              disabled={!selectedOption || loading || samePoint}
+              onClick={() => {
+                if (!selectedOption) return;
+                setIsShownOnMap(true);
+              }}
+            >
+              <MapPinned className="h-4 w-4" />
+              {copy.showOnMap}
+            </Button>
+
+            {isShownOnMap ? (
+              <Badge variant="secondary">{copy.shownOnMap}</Badge>
+            ) : null}
+          </div>
+
+          <p className="text-xs text-muted-foreground">{copy.showHint}</p>
         </div>
       </section>
 
@@ -400,14 +464,14 @@ export default function CampusTransitPanel({
             <div className="rounded-2xl bg-card px-4 py-3 shadow-sm">
               <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">{copy.walkToStop}</p>
               <p className="mt-2 text-sm font-medium">
-                {formatMeters(topOption.walkingToStopMeters, locale)} •{" "}
+                {formatMeters(topOption.walkingToStopMeters)} •{" "}
                 {formatMinutes(estimateOutdoorWalkingTime(topOption.walkingToStopMeters), locale)}
               </p>
             </div>
             <div className="rounded-2xl bg-card px-4 py-3 shadow-sm">
               <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">{copy.walkFromStop}</p>
               <p className="mt-2 text-sm font-medium">
-                {formatMeters(topOption.walkingFromArrivalMeters, locale)} •{" "}
+                {formatMeters(topOption.walkingFromArrivalMeters)} •{" "}
                 {formatMinutes(estimateOutdoorWalkingTime(topOption.walkingFromArrivalMeters), locale)}
               </p>
             </div>
@@ -427,7 +491,7 @@ export default function CampusTransitPanel({
         <section className="rounded-[28px] border border-border bg-background/70 p-4">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
-              <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">{copy.liveMap}</p>
+              <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">{copy.selectedRoute}</p>
               <div className="mt-2 flex flex-wrap items-center gap-2">
                 <Badge className="rounded-full px-3 py-1 text-sm" variant="secondary">
                   {selectedOption.firstRouteNumber}
@@ -435,7 +499,10 @@ export default function CampusTransitPanel({
                 <p className="text-sm font-semibold text-foreground">{selectedOption.firstRouteName}</p>
               </div>
               <p className="mt-2 text-xs text-muted-foreground">
-                {copy.selectedRoute}: {selectedOption.departureStopName} → {selectedOption.arrivalStopName}
+                {copy.departureStop}: {selectedOption.departureStopName}
+              </p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                {copy.arrivalStop}: {selectedOption.arrivalStopName}
               </p>
             </div>
 
@@ -447,16 +514,22 @@ export default function CampusTransitPanel({
             </div>
           </div>
 
-          <div className="mt-4 overflow-hidden rounded-[24px] border border-border">
-            <CampusTransitLiveMap locale={locale} option={selectedOption} />
-          </div>
-
           <div className="mt-4 flex flex-wrap gap-2">
+            <Button
+              type="button"
+              onClick={() => {
+                setIsShownOnMap(true);
+                onTargetSiteChange(targetSiteId);
+              }}
+            >
+              <MapPinned className="h-4 w-4" />
+              {copy.showOnMap}
+            </Button>
             <Button type="button" variant="outline" onClick={() => onTargetSiteChange(targetSiteId)}>
               <MapPinned className="h-4 w-4" />
               {copy.routeToCampus}
             </Button>
-            <Button asChild type="button">
+            <Button asChild type="button" variant="outline">
               <a href={infobusLink} target="_blank" rel="noreferrer">
                 <ExternalLink className="h-4 w-4" />
                 {copy.openInfobus}
@@ -493,7 +566,7 @@ export default function CampusTransitPanel({
                           <span>{copy.distanceToStop}</span>
                         </div>
                         <p className="mt-2 font-medium">
-                          {formatMeters(bus.distanceToDepartureStopMeters, locale)}
+                          {formatMeters(bus.distanceToDepartureStopMeters)}
                         </p>
                       </div>
                       <div className="rounded-2xl bg-muted/70 px-3 py-2 text-sm text-foreground/85">
@@ -597,10 +670,10 @@ export default function CampusTransitPanel({
 
                   <div className="mt-3 grid gap-2 sm:grid-cols-2">
                     <div className="rounded-2xl bg-muted/70 px-3 py-2 text-sm text-foreground/85">
-                      {copy.walkToStop}: {formatMeters(option.walkingToStopMeters, locale)}
+                      {copy.walkToStop}: {formatMeters(option.walkingToStopMeters)}
                     </div>
                     <div className="rounded-2xl bg-muted/70 px-3 py-2 text-sm text-foreground/85">
-                      {copy.walkFromStop}: {formatMeters(option.walkingFromArrivalMeters, locale)}
+                      {copy.walkFromStop}: {formatMeters(option.walkingFromArrivalMeters)}
                     </div>
                   </div>
 

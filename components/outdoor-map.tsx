@@ -9,6 +9,7 @@ import {
   type ResolvedOutdoorMapStyle,
 } from "@/lib/campus-map-utils";
 import type { CampusSite } from "@/lib/campus-sites";
+import type { CampusTransitMapOverlay } from "@/lib/campus-transit";
 import type { Locale } from "@/lib/i18n";
 import { text } from "@/lib/i18n";
 
@@ -21,6 +22,7 @@ interface OutdoorMapProps {
   userLng: number | null;
   userAccuracy: number | null;
   externalMapService: ExternalMapService;
+  transitOverlay: CampusTransitMapOverlay | null;
   onSiteSelect: (siteId: string) => void;
 }
 
@@ -33,6 +35,7 @@ export default function OutdoorMap({
   userLng,
   userAccuracy,
   externalMapService,
+  transitOverlay,
   onSiteSelect,
 }: OutdoorMapProps) {
   const mapRef = useRef<any>(null);
@@ -40,6 +43,7 @@ export default function OutdoorMap({
   const userMarkerRef = useRef<any>(null);
   const userAccuracyRef = useRef<any>(null);
   const routeLineRef = useRef<any>(null);
+  const transitLayerRef = useRef<any>(null);
   const tileLayerRef = useRef<any>(null);
   const siteLayerRef = useRef<any>(null);
   const siteMarkersRef = useRef<Map<string, any>>(new Map());
@@ -175,10 +179,10 @@ export default function OutdoorMap({
           map.removeLayer(userAccuracyRef.current);
           userAccuracyRef.current = null;
         }
-        if (routeLineRef.current) {
-          map.removeLayer(routeLineRef.current);
-          routeLineRef.current = null;
-        }
+      if (routeLineRef.current) {
+        map.removeLayer(routeLineRef.current);
+        routeLineRef.current = null;
+      }
         return;
       }
 
@@ -236,6 +240,10 @@ export default function OutdoorMap({
         routeLineRef.current = null;
       }
 
+      if (transitOverlay) {
+        return;
+      }
+
       const points: [number, number][] = sites
         .filter((site): site is CampusSite & { lat: number; lng: number } => site.lat !== undefined && site.lng !== undefined)
         .map((site) => [site.lat, site.lng]);
@@ -276,7 +284,128 @@ export default function OutdoorMap({
     return () => {
       cancelled = true;
     };
-  }, [selectedSiteId, sites, userAccuracy, userLat, userLng]);
+  }, [selectedSiteId, sites, transitOverlay, userAccuracy, userLat, userLng]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function updateTransitOverlay() {
+      if (!mapRef.current) return;
+      const leaflet = await import("leaflet");
+      const map = mapRef.current;
+
+      if (transitLayerRef.current) {
+        map.removeLayer(transitLayerRef.current);
+        transitLayerRef.current = null;
+      }
+
+      if (!transitOverlay) {
+        return;
+      }
+
+      const layer = leaflet.layerGroup().addTo(map);
+      const option = transitOverlay.option;
+      const segment =
+        option.routeSegment.length > 1
+          ? option.routeSegment.map((point) => [point.lat, point.lng] as [number, number])
+          : ([
+              [option.departureStopLat, option.departureStopLng],
+              [option.arrivalStopLat, option.arrivalStopLng],
+            ] satisfies [number, number][]);
+
+      leaflet
+        .polyline(segment, {
+          color: "#d94c1a",
+          weight: 5,
+          opacity: 0.94,
+          lineJoin: "round",
+        })
+        .addTo(layer);
+
+      leaflet
+        .circleMarker([option.departureStopLat, option.departureStopLng], {
+          radius: 7,
+          color: "#2563eb",
+          weight: 3,
+          fillColor: "#ffffff",
+          fillOpacity: 1,
+        })
+        .addTo(layer)
+        .bindTooltip(locale === "ru" ? "Посадка" : "Отыру", {
+          direction: "top",
+          offset: [0, -8],
+        });
+
+      leaflet
+        .circleMarker([option.arrivalStopLat, option.arrivalStopLng], {
+          radius: 7,
+          color: "#0f766e",
+          weight: 3,
+          fillColor: "#ffffff",
+          fillOpacity: 1,
+        })
+        .addTo(layer)
+        .bindTooltip(locale === "ru" ? "Выход" : "Түсу", {
+          direction: "top",
+          offset: [0, -8],
+        });
+
+      const overlayPoints: [number, number][] = [...segment];
+
+      option.liveBuses.forEach((bus) => {
+        overlayPoints.push([bus.lat, bus.lng]);
+
+        leaflet
+          .marker([bus.lat, bus.lng], {
+            icon: leaflet.divIcon({
+              className: "campus-transit-bus-marker",
+              html: `
+                <div style="
+                  width: 18px;
+                  height: 18px;
+                  border-radius: 9999px;
+                  background: ${bus.offline ? "#64748b" : "#f59e0b"};
+                  border: 3px solid #ffffff;
+                  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.24);
+                "></div>`,
+              iconSize: [18, 18],
+              iconAnchor: [9, 9],
+            }),
+          })
+          .addTo(layer)
+          .bindPopup(`
+            <div style="font-family:Inter,system-ui,sans-serif;min-width:160px;">
+              <div style="font-size:13px;font-weight:700;">${escapeHtml(bus.label)}</div>
+              <div style="margin-top:4px;font-size:12px;color:#64748b;">
+                ${bus.offline ? (locale === "ru" ? "Оффлайн" : "Оффлайн") : locale === "ru" ? "На линии" : "Желіде"}
+              </div>
+              <div style="margin-top:4px;font-size:12px;color:#334155;">
+                ${locale === "ru" ? "Скорость" : "Жылдамдық"}: ${Math.round(bus.speed)} км/ч
+              </div>
+            </div>
+          `);
+      });
+
+      transitLayerRef.current = layer;
+
+      if (userLat !== null && userLng !== null) {
+        overlayPoints.push([userLat, userLng]);
+      }
+
+      overlayPoints.push([transitOverlay.target.lat, transitOverlay.target.lng]);
+
+      if (!cancelled && overlayPoints.length > 1) {
+        const bounds = leaflet.latLngBounds(overlayPoints);
+        map.fitBounds(bounds, { padding: [72, 72], maxZoom: 16 });
+      }
+    }
+
+    updateTransitOverlay();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [locale, transitOverlay, userLat, userLng]);
 
   return (
     <div

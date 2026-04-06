@@ -24,6 +24,7 @@ import {
   LOST_AND_FOUND_ITEMS,
   TODAY_SCHEDULE,
 } from "@/lib/campus-data";
+import type { CampusTransitMapOverlay } from "@/lib/campus-transit";
 import { getRoomById, getRoomDisplayName } from "@/lib/building-data";
 import type { CampusSite } from "@/lib/campus-sites";
 import type { Locale } from "@/lib/i18n";
@@ -37,6 +38,7 @@ interface CampusServicesPanelProps {
   userLat: number | null;
   userLng: number | null;
   onSelectOutdoorSite: (siteId: string) => void;
+  onTransitOverlayChange: (overlay: CampusTransitMapOverlay | null) => void;
 }
 
 type ServiceView =
@@ -138,6 +140,7 @@ export default function CampusServicesPanel({
   userLat,
   userLng,
   onSelectOutdoorSite,
+  onTransitOverlayChange,
 }: CampusServicesPanelProps) {
   const copy = SERVICES_COPY[locale];
   const transportLabel = locale === "ru" ? "Транспорт" : "Көлік";
@@ -273,6 +276,7 @@ export default function CampusServicesPanel({
             userLat={userLat}
             userLng={userLng}
             onTargetSiteChange={onSelectOutdoorSite}
+            onTransitOverlayChange={onTransitOverlayChange}
           />
         </div>
       );
