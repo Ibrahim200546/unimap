@@ -1513,7 +1513,7 @@ export default function UniMapApp() {
         <aside
           className={cn(
             isDesktop
-              ? "relative z-10 lg:order-1 border-r border-border bg-background/95 backdrop-blur group/sidebar"
+              ? "relative z-10 lg:order-1 lg:min-h-0 border-r border-border bg-background/95 backdrop-blur group/sidebar"
               : "fixed inset-x-0 bottom-0 z-30 flex flex-col overflow-hidden rounded-t-[32px] border border-border bg-background/95 shadow-[0_-20px_50px_rgba(15,23,42,0.22)] backdrop-blur supports-[backdrop-filter]:bg-background/88"
           )}
           style={!isDesktop ? { height: mobileSheetContainerHeight } : undefined}
