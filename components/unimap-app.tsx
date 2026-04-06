@@ -10,9 +10,12 @@ import {
   CalendarClock,
   ExternalLink,
   Globe2,
+  LocateFixed,
+  Map,
   Moon,
   PanelsTopLeft,
   Route,
+  Settings2,
   Sparkles,
   SunMedium,
 } from "lucide-react";
@@ -27,6 +30,15 @@ import SearchBar from "@/components/search-bar";
 import StudentSchedulePanel from "@/components/student-schedule-panel";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
+import {
+  EXTERNAL_MAP_SERVICE_OPTIONS,
+  OUTDOOR_MAP_STYLE_OPTIONS,
+  getExternalMapServiceLabel,
+  getExternalMapUrl,
+  getOpenInLabel,
+  type ExternalMapService,
+  type OutdoorMapStyle,
+} from "@/lib/campus-map-utils";
 import {
   FLOORS,
   UNIVERSITY,
@@ -46,7 +58,7 @@ import { buildRoute, estimateWalkingTime, pixelsToMeters } from "@/lib/pathfindi
 import { APP_COPY } from "@/lib/unimap-copy";
 import { cn } from "@/lib/utils";
 
-type Panel = "navigator" | "schedule" | "places" | "services" | "details";
+type Panel = "navigator" | "schedule" | "places" | "services" | "details" | "settings";
 type Mode = "outdoor" | "indoor" | "route";
 type RouteProfile = "standard" | "accessible";
 type Point = { x: number; y: number };
@@ -68,6 +80,7 @@ const PANEL_META = [
   { id: "places" as const, icon: BookOpenText },
   { id: "services" as const, icon: Bell },
   { id: "details" as const, icon: PanelsTopLeft },
+  { id: "settings" as const, icon: Settings2 },
 ];
 
 const OUTDOOR_COPY = {
@@ -107,6 +120,43 @@ const OUTDOOR_COPY = {
   },
 } as const;
 
+const SETTINGS_COPY = {
+  ru: {
+    title: "Настройки карты",
+    description: "Здесь настраиваются подложка кампус-карты, внешний сервис и live-геолокация студента.",
+    mapStyleTitle: "Тип карты",
+    mapStyleText: "Переключайте подложку между авто-режимом, светлой, тёмной и рельефной картой.",
+    serviceTitle: "Открывать карту в сервисе",
+    serviceText: "Кнопка «Открыть в...» использует выбранный внешний картографический сервис.",
+    serviceHint: "Google Maps, 2GIS и Yandex Maps открываются в новой вкладке.",
+    geoTitle: "Текущее местоположение",
+    geoText: "Позиция обновляется через watchPosition с высокой точностью. Итоговая точность зависит от GPS, браузера и сигнала устройства.",
+    geoLive: "Реалтайм включён",
+    geoWaiting: "Ожидание сигнала",
+    geoAccuracy: "Точность",
+    geoUpdated: "Последнее обновление",
+    geoUnavailable: "Нет данных",
+    active: "Выбрано",
+  },
+  kk: {
+    title: "Карта баптаулары",
+    description: "Мұнда кампус картасының қабаты, сыртқы сервис және студенттің live-геолокациясы бапталады.",
+    mapStyleTitle: "Карта түрі",
+    mapStyleText: "Картаны авто, жарық, қараңғы және рельеф режимдері арасында ауыстырыңыз.",
+    serviceTitle: "Картаны қай сервисте ашу",
+    serviceText: "«Открыть в...» батырмасы таңдалған сыртқы карта сервисін қолданады.",
+    serviceHint: "Google Maps, 2GIS және Yandex Maps жаңа бетте ашылады.",
+    geoTitle: "Ағымдағы орналасу",
+    geoText: "Позиция watchPosition арқылы жоғары дәлдікпен жаңарады. Соңғы дәлдік GPS, браузер және құрылғы сигналына тәуелді.",
+    geoLive: "Реалтайм қосулы",
+    geoWaiting: "Сигнал күтілуде",
+    geoAccuracy: "Дәлдік",
+    geoUpdated: "Соңғы жаңарту",
+    geoUnavailable: "Дерек жоқ",
+    active: "Таңдалды",
+  },
+} as const;
+
 function getFloorById(floorId: number): FloorData {
   return FLOORS.find((floor) => floor.id === floorId) ?? FLOORS[0];
 }
@@ -125,6 +175,20 @@ function formatTimeLocalized(minutes: number, locale: Locale) {
   const hours = Math.floor(minutes / 60);
   const rest = Math.round(minutes % 60);
   return locale === "ru" ? `${hours} ч ${rest} мин` : `${hours} сағ ${rest} мин`;
+}
+
+function formatGeoAccuracyLocalized(value: number | null, locale: Locale) {
+  if (value === null) return locale === "ru" ? "Нет данных" : "Дерек жоқ";
+  return locale === "ru" ? `≈ ${Math.round(value)} м` : `≈ ${Math.round(value)} м`;
+}
+
+function formatGeoUpdatedAt(value: number | null, locale: Locale) {
+  if (value === null) return locale === "ru" ? "Нет данных" : "Дерек жоқ";
+  return new Intl.DateTimeFormat(locale === "ru" ? "ru-RU" : "kk-KZ", {
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  }).format(value);
 }
 
 function clamp(value: number, min: number, max: number) {
@@ -247,18 +311,25 @@ export default function UniMapApp() {
   const [activeOutdoorSiteId, setActiveOutdoorSiteId] = useState(CAMPUS_SITES[0]?.id ?? "");
   const [userLat, setUserLat] = useState<number | null>(null);
   const [userLng, setUserLng] = useState<number | null>(null);
+  const [userAccuracy, setUserAccuracy] = useState<number | null>(null);
+  const [geoUpdatedAt, setGeoUpdatedAt] = useState<number | null>(null);
   const [geoError, setGeoError] = useState<string | null>(null);
+  const [mapStyle, setMapStyle] = useState<OutdoorMapStyle>("auto");
+  const [externalMapService, setExternalMapService] = useState<ExternalMapService>("yandex");
   const [sidebarWidth, setSidebarWidth] = useState(390);
   const [isDesktop, setIsDesktop] = useState(false);
   const [isResizing, setIsResizing] = useState(false);
 
   const copy = APP_COPY[locale];
   const outdoorCopy = OUTDOOR_COPY[locale];
+  const settingsCopy = SETTINGS_COPY[locale];
   const panelLabels = {
     ...copy.panels,
     schedule: locale === "ru" ? "Расписание" : "Кесте",
   };
   const activeTheme = resolvedTheme === "dark" ? "dark" : "light";
+  const panelLabelsWithSettings = { ...panelLabels, settings: locale === "ru" ? "Настройки" : "Баптаулар" };
+  const effectiveOutdoorMapStyle = mapStyle === "auto" ? activeTheme : mapStyle;
   const isIndoor = mode !== "outdoor";
   const floorData = getFloorById(currentFloor);
   const collections = useMemo(
@@ -275,6 +346,8 @@ export default function UniMapApp() {
     [floorData]
   );
   const activeOutdoorSite = getCampusSiteById(activeOutdoorSiteId) ?? CAMPUS_SITES[0];
+  const activeOutdoorMapUrl = getExternalMapUrl(activeOutdoorSite, externalMapService, locale);
+  const activeExternalMapLabel = getExternalMapServiceLabel(externalMapService, locale);
   const distanceToActiveSite =
     userLat !== null && userLng !== null && activeOutdoorSite?.lat !== undefined && activeOutdoorSite?.lng !== undefined
       ? haversineDistance(userLat, userLng, activeOutdoorSite.lat, activeOutdoorSite.lng)
@@ -295,11 +368,29 @@ export default function UniMapApp() {
     if (stored === "ru" || stored === "kk") {
       setLocale(stored);
     }
+
+    const storedMapStyle = window.localStorage.getItem("smart-campus-map-style");
+    if (storedMapStyle === "auto" || storedMapStyle === "light" || storedMapStyle === "dark" || storedMapStyle === "relief") {
+      setMapStyle(storedMapStyle);
+    }
+
+    const storedExternalMap = window.localStorage.getItem("smart-campus-external-map");
+    if (storedExternalMap === "yandex" || storedExternalMap === "2gis" || storedExternalMap === "google") {
+      setExternalMapService(storedExternalMap);
+    }
   }, []);
 
   useEffect(() => {
     window.localStorage.setItem("smart-campus-locale", locale);
   }, [locale]);
+
+  useEffect(() => {
+    window.localStorage.setItem("smart-campus-map-style", mapStyle);
+  }, [mapStyle]);
+
+  useEffect(() => {
+    window.localStorage.setItem("smart-campus-external-map", externalMapService);
+  }, [externalMapService]);
 
   useEffect(() => {
     const media = window.matchMedia("(min-width: 1024px)");
@@ -352,13 +443,15 @@ export default function UniMapApp() {
     }
 
     const watchId = navigator.geolocation.watchPosition(
-      ({ coords }) => {
+      ({ coords, timestamp }) => {
         setUserLat(coords.latitude);
         setUserLng(coords.longitude);
+        setUserAccuracy(Number.isFinite(coords.accuracy) ? coords.accuracy : null);
+        setGeoUpdatedAt(timestamp ?? Date.now());
         setGeoError(null);
       },
       () => setGeoError(copy.geoDenied),
-      { enableHighAccuracy: true, timeout: 10000, maximumAge: 5000 }
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
     );
 
     return () => navigator.geolocation.clearWatch(watchId);
@@ -441,12 +534,24 @@ export default function UniMapApp() {
     [currentFloor, locale, routeProfile, routeStart]
   );
 
-  const renderPhotoLinks = (site: CampusSite) => {
-    if (!site.photoLinks?.length) return null;
+  const renderSiteResourceLinks = (site: CampusSite) => {
+    const externalMapUrl = getExternalMapUrl(site, externalMapService, locale);
+    if (!externalMapUrl && !site.photoLinks?.length) return null;
 
     return (
       <div className="mt-4 flex flex-wrap gap-2">
-        {site.photoLinks.map((link) => (
+        {externalMapUrl ? (
+          <a
+            href={externalMapUrl}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex items-center gap-2 rounded-2xl bg-primary px-4 py-3 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90"
+          >
+            <ExternalLink className="h-4 w-4" />
+            {getOpenInLabel(externalMapService, locale)}
+          </a>
+        ) : null}
+        {(site.photoLinks ?? []).map((link) => (
           <a
             key={`${site.id}-${link.url}`}
             href={link.url}
@@ -499,7 +604,7 @@ export default function UniMapApp() {
           )}
         </div>
 
-        {renderPhotoLinks(activeOutdoorSite)}
+        {renderSiteResourceLinks(activeOutdoorSite)}
       </section>
 
       <section className="rounded-[28px] border border-border bg-card p-5 shadow-sm">
@@ -572,7 +677,7 @@ export default function UniMapApp() {
 
           <div className="mt-4">
             <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">{outdoorCopy.sourceLinks}</p>
-            {renderPhotoLinks(activeOutdoorSite)}
+            {renderSiteResourceLinks(activeOutdoorSite)}
           </div>
         </section>
       );
@@ -631,6 +736,114 @@ export default function UniMapApp() {
       </section>
     );
   };
+
+  const renderSettingsPanel = () => (
+    <div className="space-y-4">
+      <section className="rounded-[28px] border border-border bg-card p-5 shadow-sm">
+        <h3 className="text-base font-semibold">{settingsCopy.title}</h3>
+        <p className="mt-1 text-sm text-muted-foreground">{settingsCopy.description}</p>
+      </section>
+
+      <section className="rounded-[28px] border border-border bg-card p-5 shadow-sm">
+        <div className="flex items-start gap-3">
+          <Map className="mt-0.5 h-5 w-5 text-primary" />
+          <div className="min-w-0">
+            <h4 className="text-sm font-semibold">{settingsCopy.mapStyleTitle}</h4>
+            <p className="mt-1 text-sm text-muted-foreground">{settingsCopy.mapStyleText}</p>
+          </div>
+        </div>
+
+        <div className="mt-4 grid gap-2">
+          {OUTDOOR_MAP_STYLE_OPTIONS.map((option) => (
+            <button
+              key={option.id}
+              type="button"
+              onClick={() => setMapStyle(option.id)}
+              className={cn(
+                "rounded-2xl border px-4 py-3 text-left transition-colors",
+                mapStyle === option.id ? "border-primary bg-primary/10" : "border-border hover:bg-muted"
+              )}
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold">{text(option.label, locale)}</p>
+                  <p className="mt-1 text-xs text-muted-foreground">{text(option.description, locale)}</p>
+                </div>
+                {mapStyle === option.id ? <Badge variant="secondary">{settingsCopy.active}</Badge> : null}
+              </div>
+            </button>
+          ))}
+        </div>
+      </section>
+
+      <section className="rounded-[28px] border border-border bg-card p-5 shadow-sm">
+        <div className="flex items-start gap-3">
+          <ExternalLink className="mt-0.5 h-5 w-5 text-primary" />
+          <div className="min-w-0">
+            <h4 className="text-sm font-semibold">{settingsCopy.serviceTitle}</h4>
+            <p className="mt-1 text-sm text-muted-foreground">{settingsCopy.serviceText}</p>
+          </div>
+        </div>
+
+        <div className="mt-4 grid gap-2">
+          {EXTERNAL_MAP_SERVICE_OPTIONS.map((option) => (
+            <button
+              key={option.id}
+              type="button"
+              onClick={() => setExternalMapService(option.id)}
+              className={cn(
+                "rounded-2xl border px-4 py-3 text-left transition-colors",
+                externalMapService === option.id ? "border-primary bg-primary/10" : "border-border hover:bg-muted"
+              )}
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold">{text(option.label, locale)}</p>
+                  <p className="mt-1 text-xs text-muted-foreground">{text(option.description, locale)}</p>
+                </div>
+                {externalMapService === option.id ? <Badge variant="secondary">{settingsCopy.active}</Badge> : null}
+              </div>
+            </button>
+          ))}
+        </div>
+
+        <p className="mt-3 text-xs text-muted-foreground">{settingsCopy.serviceHint}</p>
+      </section>
+
+      <section className="rounded-[28px] border border-border bg-card p-5 shadow-sm">
+        <div className="flex items-start justify-between gap-4">
+          <div className="flex min-w-0 items-start gap-3">
+            <LocateFixed className="mt-0.5 h-5 w-5 text-primary" />
+            <div className="min-w-0">
+              <h4 className="text-sm font-semibold">{settingsCopy.geoTitle}</h4>
+              <p className="mt-1 text-sm text-muted-foreground">{settingsCopy.geoText}</p>
+            </div>
+          </div>
+          <Badge variant={userLat !== null && userLng !== null ? "secondary" : "outline"}>
+            {userLat !== null && userLng !== null ? settingsCopy.geoLive : settingsCopy.geoWaiting}
+          </Badge>
+        </div>
+
+        <div className="mt-4 grid gap-3 sm:grid-cols-2">
+          <div className="rounded-2xl bg-muted/70 p-4">
+            <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">{settingsCopy.geoAccuracy}</p>
+            <p className="mt-2 text-sm font-medium">{formatGeoAccuracyLocalized(userAccuracy, locale)}</p>
+          </div>
+          <div className="rounded-2xl bg-muted/70 p-4">
+            <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">{settingsCopy.geoUpdated}</p>
+            <p className="mt-2 text-sm font-medium">{formatGeoUpdatedAt(geoUpdatedAt, locale)}</p>
+          </div>
+        </div>
+
+        <div className="mt-4 rounded-2xl border border-border px-4 py-3">
+          <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">{settingsCopy.serviceTitle}</p>
+          <p className="mt-2 text-sm font-medium">{activeExternalMapLabel}</p>
+        </div>
+
+        {geoError ? <p className="mt-4 text-sm font-medium text-destructive">{geoError}</p> : null}
+      </section>
+    </div>
+  );
 
   const renderPanel = () => {
     if (panel === "navigator") {
@@ -789,6 +1002,10 @@ export default function UniMapApp() {
       );
     }
 
+    if (panel === "settings") {
+      return renderSettingsPanel();
+    }
+
     return renderDetailsPanel();
   };
 
@@ -860,7 +1077,7 @@ export default function UniMapApp() {
                   )}
                 >
                   <Icon className="mr-2 inline h-4 w-4" />
-                  {panelLabels[id]}
+                  {panelLabelsWithSettings[id]}
                 </button>
               ))}
             </div>
@@ -910,11 +1127,13 @@ export default function UniMapApp() {
             ) : (
               <OutdoorMap
                 locale={locale}
-                theme={activeTheme}
+                mapStyle={effectiveOutdoorMapStyle}
                 sites={CAMPUS_SITES}
                 selectedSiteId={activeOutdoorSiteId}
                 userLat={userLat}
                 userLng={userLng}
+                userAccuracy={userAccuracy}
+                externalMapService={externalMapService}
                 onSiteSelect={setActiveOutdoorSiteId}
               />
             )}
@@ -973,15 +1192,19 @@ export default function UniMapApp() {
                   >
                     {copy.returnToCampus}
                   </button>
-                ) : activeOutdoorSite.indoorAvailable ? (
-                  <button
-                    type="button"
-                    onClick={() => openIndoorFromSite(activeOutdoorSite)}
-                    className="rounded-2xl border border-border bg-background/92 px-4 py-3 text-sm font-medium shadow-lg backdrop-blur transition-colors hover:bg-muted"
+                ) : activeOutdoorMapUrl ? (
+                  <a
+                    href={activeOutdoorMapUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-2 rounded-2xl border border-border bg-background/92 px-4 py-3 text-sm font-medium shadow-lg backdrop-blur transition-colors hover:bg-muted"
                   >
-                    {outdoorCopy.openIndoor}
-                  </button>
-                ) : activeOutdoorSite.photoLinks?.[0] ? (
+                    <ExternalLink className="h-4 w-4" />
+                    {getOpenInLabel(externalMapService, locale)}
+                  </a>
+                ) : null}
+
+                {!isIndoor && activeOutdoorSite.photoLinks?.[0] ? (
                   <a
                     href={activeOutdoorSite.photoLinks[0].url}
                     target="_blank"
@@ -991,6 +1214,16 @@ export default function UniMapApp() {
                     <ExternalLink className="h-4 w-4" />
                     {outdoorCopy.openPhotos}
                   </a>
+                ) : null}
+
+                {!isIndoor && activeOutdoorSite.indoorAvailable ? (
+                  <button
+                    type="button"
+                    onClick={() => openIndoorFromSite(activeOutdoorSite)}
+                    className="rounded-2xl border border-border bg-background/92 px-4 py-3 text-sm font-medium shadow-lg backdrop-blur transition-colors hover:bg-muted"
+                  >
+                    {outdoorCopy.openIndoor}
+                  </button>
                 ) : null}
               </div>
             </div>

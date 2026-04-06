@@ -2,32 +2,43 @@
 
 import { useEffect, useRef } from "react";
 
+import {
+  getExternalMapUrl,
+  getOpenInLabel,
+  type ExternalMapService,
+  type ResolvedOutdoorMapStyle,
+} from "@/lib/campus-map-utils";
 import type { CampusSite } from "@/lib/campus-sites";
 import type { Locale } from "@/lib/i18n";
 import { text } from "@/lib/i18n";
 
 interface OutdoorMapProps {
   locale: Locale;
-  theme: "light" | "dark";
+  mapStyle: ResolvedOutdoorMapStyle;
   sites: CampusSite[];
   selectedSiteId: string;
   userLat: number | null;
   userLng: number | null;
+  userAccuracy: number | null;
+  externalMapService: ExternalMapService;
   onSiteSelect: (siteId: string) => void;
 }
 
 export default function OutdoorMap({
   locale,
-  theme,
+  mapStyle,
   sites,
   selectedSiteId,
   userLat,
   userLng,
+  userAccuracy,
+  externalMapService,
   onSiteSelect,
 }: OutdoorMapProps) {
   const mapRef = useRef<any>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const userMarkerRef = useRef<any>(null);
+  const userAccuracyRef = useRef<any>(null);
   const routeLineRef = useRef<any>(null);
   const tileLayerRef = useRef<any>(null);
   const siteLayerRef = useRef<any>(null);
@@ -55,7 +66,10 @@ export default function OutdoorMap({
         attributionControl: false,
       });
 
-      tileLayerRef.current = leaflet.tileLayer(getTileUrl(theme), { maxZoom: 19 }).addTo(map);
+      const tileConfig = getTileLayerConfig(mapStyle);
+      tileLayerRef.current = leaflet
+        .tileLayer(tileConfig.url, { maxZoom: tileConfig.maxZoom, subdomains: tileConfig.subdomains })
+        .addTo(map);
       mapRef.current = map;
     }
 
@@ -68,7 +82,7 @@ export default function OutdoorMap({
         mapRef.current = null;
       }
     };
-  }, [sites, theme]);
+  }, [mapStyle, sites]);
 
   useEffect(() => {
     async function updateTileTheme() {
@@ -79,11 +93,14 @@ export default function OutdoorMap({
         mapRef.current.removeLayer(tileLayerRef.current);
       }
 
-      tileLayerRef.current = leaflet.tileLayer(getTileUrl(theme), { maxZoom: 19 }).addTo(mapRef.current);
+      const tileConfig = getTileLayerConfig(mapStyle);
+      tileLayerRef.current = leaflet
+        .tileLayer(tileConfig.url, { maxZoom: tileConfig.maxZoom, subdomains: tileConfig.subdomains })
+        .addTo(mapRef.current);
     }
 
     updateTileTheme();
-  }, [theme]);
+  }, [mapStyle]);
 
   useEffect(() => {
     async function updateSiteMarkers() {
@@ -109,7 +126,7 @@ export default function OutdoorMap({
             icon: getSiteIcon(leaflet, site.kind, site.id === selectedSiteId),
           })
           .addTo(layer)
-          .bindPopup(buildPopup(site, locale))
+          .bindPopup(buildPopup(site, locale, externalMapService))
           .on("click", () => onSiteSelect(site.id));
 
         markers.set(site.id, marker);
@@ -125,7 +142,7 @@ export default function OutdoorMap({
     }
 
     updateSiteMarkers();
-  }, [locale, onSiteSelect, selectedSiteId, sites, userLat, userLng]);
+  }, [externalMapService, locale, onSiteSelect, selectedSiteId, sites, userLat, userLng]);
 
   useEffect(() => {
     async function syncSelectedSite() {
@@ -153,6 +170,10 @@ export default function OutdoorMap({
         if (userMarkerRef.current) {
           map.removeLayer(userMarkerRef.current);
           userMarkerRef.current = null;
+        }
+        if (userAccuracyRef.current) {
+          map.removeLayer(userAccuracyRef.current);
+          userAccuracyRef.current = null;
         }
         if (routeLineRef.current) {
           map.removeLayer(routeLineRef.current);
@@ -189,6 +210,27 @@ export default function OutdoorMap({
         userMarkerRef.current = leaflet.marker([userLat, userLng], { icon: userIcon }).addTo(map);
       }
 
+      if (userAccuracy && Number.isFinite(userAccuracy)) {
+        if (userAccuracyRef.current) {
+          userAccuracyRef.current.setLatLng([userLat, userLng]);
+          userAccuracyRef.current.setRadius(userAccuracy);
+        } else {
+          userAccuracyRef.current = leaflet
+            .circle([userLat, userLng], {
+              radius: userAccuracy,
+              color: "hsl(210 70% 45%)",
+              weight: 1.5,
+              opacity: 0.35,
+              fillColor: "hsl(210 70% 45%)",
+              fillOpacity: 0.1,
+            })
+            .addTo(map);
+        }
+      } else if (userAccuracyRef.current) {
+        map.removeLayer(userAccuracyRef.current);
+        userAccuracyRef.current = null;
+      }
+
       if (routeLineRef.current) {
         map.removeLayer(routeLineRef.current);
         routeLineRef.current = null;
@@ -207,7 +249,7 @@ export default function OutdoorMap({
           targetLat: targetSite.lat!,
           targetLng: targetSite.lng!,
           cache: routeCacheRef.current,
-          cacheKey: `${selectedSiteId}:${userLat.toFixed(4)}:${userLng.toFixed(4)}`,
+          cacheKey: `${selectedSiteId}:${userLat.toFixed(5)}:${userLng.toFixed(5)}`,
         });
 
         if (!cancelled) {
@@ -234,7 +276,7 @@ export default function OutdoorMap({
     return () => {
       cancelled = true;
     };
-  }, [selectedSiteId, sites, userLat, userLng]);
+  }, [selectedSiteId, sites, userAccuracy, userLat, userLng]);
 
   return (
     <div
@@ -246,7 +288,8 @@ export default function OutdoorMap({
   );
 }
 
-function buildPopup(site: CampusSite, locale: Locale) {
+function buildPopup(site: CampusSite, locale: Locale, externalMapService: ExternalMapService) {
+  const externalMapUrl = getExternalMapUrl(site, externalMapService, locale);
   const links = (site.photoLinks ?? [])
     .map(
       (link) =>
@@ -255,13 +298,18 @@ function buildPopup(site: CampusSite, locale: Locale) {
         )}</a>`
     )
     .join("");
+  const openInLink = externalMapUrl
+    ? `<a href="${externalMapUrl}" target="_blank" rel="noreferrer" style="display:inline-flex;align-items:center;justify-content:center;padding:8px 10px;border-radius:12px;background:#0f172a;color:#ffffff;text-decoration:none;font-size:12px;font-weight:600;">${escapeHtml(
+        getOpenInLabel(externalMapService, locale)
+      )}</a>`
+    : "";
 
   return `
     <div style="width:260px;padding:4px 2px;font-family:Inter,system-ui,sans-serif;">
       <div style="font-size:14px;font-weight:700;color:#0f172a;">${escapeHtml(text(site.name, locale))}</div>
       <div style="margin-top:6px;font-size:12px;line-height:1.45;color:#64748b;">${escapeHtml(text(site.address, locale))}</div>
       <div style="margin-top:8px;font-size:12px;line-height:1.5;color:#334155;">${escapeHtml(text(site.description, locale))}</div>
-      ${links ? `<div style="margin-top:10px;display:flex;flex-wrap:wrap;gap:6px;">${links}</div>` : ""}
+      ${links || openInLink ? `<div style="margin-top:10px;display:flex;flex-wrap:wrap;gap:6px;">${openInLink}${links}</div>` : ""}
     </div>`;
 }
 
@@ -303,12 +351,28 @@ function getSiteColor(kind: CampusSite["kind"]) {
   return "hsl(220 16% 42%)";
 }
 
-function getTileUrl(theme: "light" | "dark") {
-  if (theme === "dark") {
-    return "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png";
+function getTileLayerConfig(mapStyle: ResolvedOutdoorMapStyle) {
+  if (mapStyle === "dark") {
+    return {
+      url: "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",
+      maxZoom: 19,
+      subdomains: "abcd",
+    };
   }
 
-  return "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png";
+  if (mapStyle === "relief") {
+    return {
+      url: "https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png",
+      maxZoom: 17,
+      subdomains: ["a", "b", "c"],
+    };
+  }
+
+  return {
+    url: "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png",
+    maxZoom: 19,
+    subdomains: "abcd",
+  };
 }
 
 function escapeHtml(value: string) {
