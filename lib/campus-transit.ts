@@ -1,3 +1,19 @@
+export interface CampusTransitPoint {
+  lat: number;
+  lng: number;
+}
+
+export interface CampusTransitLiveBus {
+  id: number;
+  label: string;
+  lat: number;
+  lng: number;
+  speed: number;
+  direction: number;
+  offline: boolean;
+  distanceToDepartureStopMeters: number;
+}
+
 export interface CampusTransitLeg {
   routeId: number;
   routeName: string;
@@ -26,6 +42,9 @@ export interface CampusTransitOption {
   nextArrivalSeconds: number | null;
   walkingToStopMeters: number;
   walkingFromArrivalMeters: number;
+  routeSegment: CampusTransitPoint[];
+  liveBuses: CampusTransitLiveBus[];
+  activeBusCount: number;
   legs: CampusTransitLeg[];
 }
 
