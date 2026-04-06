@@ -85,6 +85,8 @@ const PANEL_META = [
   { id: "settings" as const, icon: Settings2 },
 ];
 
+const MOBILE_SHEET_HANDLE_HEIGHT = 84;
+
 const OUTDOOR_COPY = {
   ru: {
     universityTitle: "Жетісу университеті",
@@ -334,7 +336,7 @@ export default function UniMapApp() {
   const [isDesktop, setIsDesktop] = useState(false);
   const [isResizing, setIsResizing] = useState(false);
   const [viewportHeight, setViewportHeight] = useState(0);
-  const [mobileSheetHeight, setMobileSheetHeight] = useState(264);
+  const [mobileSheetHeight, setMobileSheetHeight] = useState(0);
   const [isMobileSheetDragging, setIsMobileSheetDragging] = useState(false);
 
   const copy = APP_COPY[locale];
@@ -383,29 +385,31 @@ export default function UniMapApp() {
     const baseHeight =
       viewportHeight ||
       (typeof window !== "undefined" ? window.innerHeight : 914);
-    const full = Math.max(baseHeight - 18, 520);
-    const peek = Math.min(clamp(baseHeight * 0.28, 240, 320), full - 140);
+    const full = Math.max(baseHeight - MOBILE_SHEET_HANDLE_HEIGHT - 18, 420);
     const half = Math.min(
       clamp(baseHeight * 0.56, 420, 620),
       full - 64
     );
 
     return {
-      peek,
-      half: Math.max(half, peek + 96),
+      closed: 0,
+      half: Math.max(half, 280),
       full,
     };
   }, [viewportHeight]);
   const mobileSheetSnapOrder = useMemo(
     () =>
       [
-        mobileSheetHeights.peek,
+        mobileSheetHeights.closed,
         mobileSheetHeights.half,
         mobileSheetHeights.full,
       ] as const,
     [mobileSheetHeights]
   );
-  const mobileMapBottomOffset = isDesktop ? 16 : mobileSheetHeight + 14;
+  const mobileSheetContainerHeight = isDesktop
+    ? 0
+    : mobileSheetHeight + MOBILE_SHEET_HANDLE_HEIGHT;
+  const mobileMapBottomOffset = isDesktop ? 16 : mobileSheetContainerHeight + 14;
 
   useEffect(() => {
     const stored = window.localStorage.getItem("smart-campus-locale");
@@ -469,8 +473,8 @@ export default function UniMapApp() {
     setMobileSheetHeight((current) => {
       const nextHeight =
         current === 0
-          ? mobileSheetHeights.peek
-          : clamp(current, mobileSheetHeights.peek, mobileSheetHeights.full);
+          ? mobileSheetHeights.closed
+          : clamp(current, mobileSheetHeights.closed, mobileSheetHeights.full);
 
       return nextHeight;
     });
@@ -657,7 +661,7 @@ export default function UniMapApp() {
       setMobileSheetHeight(
         clamp(
           drag.startHeight + delta,
-          mobileSheetHeights.peek,
+          mobileSheetHeights.closed,
           mobileSheetHeights.full
         )
       );
@@ -693,18 +697,18 @@ export default function UniMapApp() {
         setMobileSheetHeight((current) =>
           clamp(
             current + Math.abs(event.deltaY),
-            mobileSheetHeights.peek,
+            mobileSheetHeights.closed,
             mobileSheetHeights.full
           )
         );
       }
 
-      if (scrollingDown && atTop && mobileSheetHeight > mobileSheetHeights.peek + 4) {
+      if (scrollingDown && atTop && mobileSheetHeight > mobileSheetHeights.closed + 4) {
         event.preventDefault();
         setMobileSheetHeight((current) =>
           clamp(
             current - Math.abs(event.deltaY),
-            mobileSheetHeights.peek,
+            mobileSheetHeights.closed,
             mobileSheetHeights.full
           )
         );
@@ -835,7 +839,9 @@ export default function UniMapApp() {
 
           <p className="mt-4 text-sm text-foreground/85">{text(activeOutdoorSite.description, locale)}</p>
 
-          {activeOutdoorSite.lat !== undefined && activeOutdoorSite.lng !== undefined ? (
+          {isDesktop &&
+          activeOutdoorSite.lat !== undefined &&
+          activeOutdoorSite.lng !== undefined ? (
             <div className="mt-4 rounded-2xl bg-muted/70 p-4">
               <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">{outdoorCopy.coordinates}</p>
               <p className="mt-2 text-sm font-medium">
@@ -1341,95 +1347,97 @@ export default function UniMapApp() {
               />
             )}
 
-            <div className="pointer-events-none absolute inset-x-4 top-4 grid gap-3 xl:grid-cols-[minmax(0,1fr)_auto]">
-              <div className="pointer-events-auto max-w-[min(100%,560px)] rounded-[24px] bg-background/92 px-4 py-3 shadow-lg backdrop-blur">
-                <div className="flex items-start gap-3">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (isIndoor) {
+            {isDesktop || isIndoor ? (
+              <div className="pointer-events-none absolute inset-x-4 top-4 grid gap-3 xl:grid-cols-[minmax(0,1fr)_auto]">
+                <div className="pointer-events-auto max-w-[min(100%,560px)] rounded-[24px] bg-background/92 px-4 py-3 shadow-lg backdrop-blur">
+                  <div className="flex items-start gap-3">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (isIndoor) {
+                          setMode("outdoor");
+                          setManualIndoor(false);
+                          clearRoute();
+                        }
+                      }}
+                      className={cn(
+                        "rounded-xl p-2 transition-colors hover:bg-muted",
+                        !isIndoor && "opacity-50"
+                      )}
+                    >
+                      <ArrowLeft className="h-4 w-4" />
+                    </button>
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold">{isIndoor ? copy.mapTitle : copy.campusMap}</p>
+                      <p className="truncate text-xs text-muted-foreground">
+                        {isIndoor ? text(UNIVERSITY.name, locale) : text(activeOutdoorSite.name, locale)}
+                      </p>
+                      {!isIndoor ? (
+                        <p className="truncate text-xs text-muted-foreground/80">
+                          {text(activeOutdoorSite.address, locale)}
+                        </p>
+                      ) : null}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="pointer-events-auto flex flex-wrap items-center gap-3 xl:justify-end">
+                  {isIndoor ? (
+                    <FloorSelector locale={locale} currentFloor={currentFloor} onChange={setCurrentFloor} />
+                  ) : (
+                    <Badge variant="secondary">
+                      {outdoorCopy.campusCount}: {CAMPUS_SITES.filter((site) => site.lat !== undefined && site.lng !== undefined).length}
+                    </Badge>
+                  )}
+
+                  {isIndoor ? (
+                    <button
+                      type="button"
+                      onClick={() => {
                         setMode("outdoor");
                         setManualIndoor(false);
                         clearRoute();
-                      }
-                    }}
-                    className={cn(
-                      "rounded-xl p-2 transition-colors hover:bg-muted",
-                      !isIndoor && "opacity-50"
-                    )}
-                  >
-                    <ArrowLeft className="h-4 w-4" />
-                  </button>
-                  <div className="min-w-0">
-                    <p className="text-sm font-semibold">{isIndoor ? copy.mapTitle : copy.campusMap}</p>
-                    <p className="truncate text-xs text-muted-foreground">
-                      {isIndoor ? text(UNIVERSITY.name, locale) : text(activeOutdoorSite.name, locale)}
-                    </p>
-                    {!isIndoor ? (
-                      <p className="truncate text-xs text-muted-foreground/80">
-                        {text(activeOutdoorSite.address, locale)}
-                      </p>
-                    ) : null}
-                  </div>
+                      }}
+                      className="rounded-2xl border border-border bg-background/92 px-4 py-3 text-sm font-medium shadow-lg backdrop-blur transition-colors hover:bg-muted"
+                    >
+                      {copy.returnToCampus}
+                    </button>
+                  ) : activeOutdoorMapUrl ? (
+                    <a
+                      href={activeOutdoorMapUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex items-center gap-2 rounded-2xl border border-border bg-background/92 px-4 py-3 text-sm font-medium shadow-lg backdrop-blur transition-colors hover:bg-muted"
+                    >
+                      <ExternalLink className="h-4 w-4" />
+                      {getOpenInLabel(externalMapService, locale)}
+                    </a>
+                  ) : null}
+
+                  {!isIndoor && activeOutdoorSite.photoLinks?.[0] ? (
+                    <a
+                      href={activeOutdoorSite.photoLinks[0].url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex items-center gap-2 rounded-2xl border border-border bg-background/92 px-4 py-3 text-sm font-medium shadow-lg backdrop-blur transition-colors hover:bg-muted"
+                    >
+                      <ExternalLink className="h-4 w-4" />
+                      {outdoorCopy.openPhotos}
+                    </a>
+                  ) : null}
+
+                  {!isIndoor && activeOutdoorSite.indoorAvailable ? (
+                    <button
+                      type="button"
+                      onClick={() => openIndoorFromSite(activeOutdoorSite)}
+                      className="rounded-2xl border border-border bg-background/92 px-4 py-3 text-sm font-medium shadow-lg backdrop-blur transition-colors hover:bg-muted"
+                    >
+                      {outdoorCopy.openIndoor}
+                    </button>
+                  ) : null}
                 </div>
               </div>
-
-              <div className="pointer-events-auto flex flex-wrap items-center gap-3 xl:justify-end">
-                {isIndoor ? (
-                  <FloorSelector locale={locale} currentFloor={currentFloor} onChange={setCurrentFloor} />
-                ) : (
-                  <Badge variant="secondary">
-                    {outdoorCopy.campusCount}: {CAMPUS_SITES.filter((site) => site.lat !== undefined && site.lng !== undefined).length}
-                  </Badge>
-                )}
-
-                {isIndoor ? (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setMode("outdoor");
-                      setManualIndoor(false);
-                      clearRoute();
-                    }}
-                    className="rounded-2xl border border-border bg-background/92 px-4 py-3 text-sm font-medium shadow-lg backdrop-blur transition-colors hover:bg-muted"
-                  >
-                    {copy.returnToCampus}
-                  </button>
-                ) : activeOutdoorMapUrl ? (
-                  <a
-                    href={activeOutdoorMapUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="inline-flex items-center gap-2 rounded-2xl border border-border bg-background/92 px-4 py-3 text-sm font-medium shadow-lg backdrop-blur transition-colors hover:bg-muted"
-                  >
-                    <ExternalLink className="h-4 w-4" />
-                    {getOpenInLabel(externalMapService, locale)}
-                  </a>
-                ) : null}
-
-                {!isIndoor && activeOutdoorSite.photoLinks?.[0] ? (
-                  <a
-                    href={activeOutdoorSite.photoLinks[0].url}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="inline-flex items-center gap-2 rounded-2xl border border-border bg-background/92 px-4 py-3 text-sm font-medium shadow-lg backdrop-blur transition-colors hover:bg-muted"
-                  >
-                    <ExternalLink className="h-4 w-4" />
-                    {outdoorCopy.openPhotos}
-                  </a>
-                ) : null}
-
-                {!isIndoor && activeOutdoorSite.indoorAvailable ? (
-                  <button
-                    type="button"
-                    onClick={() => openIndoorFromSite(activeOutdoorSite)}
-                    className="rounded-2xl border border-border bg-background/92 px-4 py-3 text-sm font-medium shadow-lg backdrop-blur transition-colors hover:bg-muted"
-                  >
-                    {outdoorCopy.openIndoor}
-                  </button>
-                ) : null}
-              </div>
-            </div>
+            ) : null}
 
             <div
               className="pointer-events-none absolute inset-x-4 flex flex-col gap-3 xl:flex-row xl:items-end xl:justify-between"
@@ -1478,7 +1486,7 @@ export default function UniMapApp() {
                     {formatTimeLocalized(estimateWalkingTime(routePlan.totalMeters), locale)}
                   </p>
                 </div>
-              ) : !isIndoor ? (
+              ) : !isIndoor && isDesktop ? (
                 <div className="pointer-events-auto rounded-[24px] bg-background/90 px-4 py-3 shadow-lg backdrop-blur">
                   <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">{outdoorCopy.coordinates}</p>
                   <p className="mt-1 text-sm font-semibold">{text(activeOutdoorSite.name, locale)}</p>
@@ -1508,7 +1516,8 @@ export default function UniMapApp() {
               ? "relative z-10 lg:order-1 border-r border-border bg-background/95 backdrop-blur group/sidebar"
               : "fixed inset-x-0 bottom-0 z-30 flex flex-col overflow-hidden rounded-t-[32px] border border-border bg-background/95 shadow-[0_-20px_50px_rgba(15,23,42,0.22)] backdrop-blur supports-[backdrop-filter]:bg-background/88"
           )}
-          style={!isDesktop ? { height: mobileSheetHeight } : undefined}
+          style={!isDesktop ? { height: mobileSheetContainerHeight } : undefined}
+          onWheel={!isDesktop ? handleMobileSheetWheel : undefined}
         >
           {isDesktop ? (
             <>
@@ -1544,7 +1553,7 @@ export default function UniMapApp() {
                   <button
                     type="button"
                     onClick={() => nudgeMobileSheet("down")}
-                    disabled={mobileSheetHeight <= mobileSheetHeights.peek + 6}
+                    disabled={mobileSheetHeight <= mobileSheetHeights.closed + 6}
                     className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-border bg-card text-muted-foreground shadow-sm transition-colors hover:bg-muted disabled:opacity-40"
                   >
                     <ChevronDown className="h-4 w-4" />
@@ -1597,7 +1606,6 @@ export default function UniMapApp() {
 
               <div
                 ref={mobileSheetContentRef}
-                onWheel={handleMobileSheetWheel}
                 className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pt-3"
               >
                 <div className="flex min-h-full flex-col gap-3">
