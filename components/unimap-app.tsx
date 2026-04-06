@@ -8,6 +8,8 @@ import {
   BookOpenText,
   Building2,
   CalendarClock,
+  ChevronDown,
+  ChevronUp,
   ExternalLink,
   Globe2,
   LocateFixed,
@@ -195,6 +197,12 @@ function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value));
 }
 
+function getNearestSnapHeight(height: number, snapPoints: number[]) {
+  return snapPoints.reduce((closest, point) =>
+    Math.abs(point - height) < Math.abs(closest - height) ? point : closest
+  );
+}
+
 function getDefaultStartContext(floorId: number, locale: Locale): StartContext {
   const floor = getFloorById(floorId);
   const entrance = floor.rooms.find((room) => room.type === "entrance") ?? floor.rooms[0];
@@ -296,6 +304,12 @@ function createRoutePlan(args: {
 export default function UniMapApp() {
   const { resolvedTheme, setTheme } = useTheme();
   const gridRef = useRef<HTMLDivElement>(null);
+  const mobileSheetContentRef = useRef<HTMLDivElement>(null);
+  const mobileSheetPointerRef = useRef<{
+    pointerId: number;
+    startY: number;
+    startHeight: number;
+  } | null>(null);
   const [locale, setLocale] = useState<Locale>("ru");
   const [mode, setMode] = useState<Mode>("outdoor");
   const [panel, setPanel] = useState<Panel>("navigator");
@@ -319,6 +333,9 @@ export default function UniMapApp() {
   const [sidebarWidth, setSidebarWidth] = useState(390);
   const [isDesktop, setIsDesktop] = useState(false);
   const [isResizing, setIsResizing] = useState(false);
+  const [viewportHeight, setViewportHeight] = useState(0);
+  const [mobileSheetHeight, setMobileSheetHeight] = useState(264);
+  const [isMobileSheetDragging, setIsMobileSheetDragging] = useState(false);
 
   const copy = APP_COPY[locale];
   const outdoorCopy = OUTDOOR_COPY[locale];
@@ -362,6 +379,33 @@ export default function UniMapApp() {
         : getConnectorRoom(currentFloor, routePlan.profile)
       : highlightedRoom;
   const gridStyle = isDesktop ? { gridTemplateColumns: `${sidebarWidth}px minmax(0, 1fr)` } : undefined;
+  const mobileSheetHeights = useMemo(() => {
+    const baseHeight =
+      viewportHeight ||
+      (typeof window !== "undefined" ? window.innerHeight : 914);
+    const full = Math.max(baseHeight - 18, 520);
+    const peek = Math.min(clamp(baseHeight * 0.28, 240, 320), full - 140);
+    const half = Math.min(
+      clamp(baseHeight * 0.56, 420, 620),
+      full - 64
+    );
+
+    return {
+      peek,
+      half: Math.max(half, peek + 96),
+      full,
+    };
+  }, [viewportHeight]);
+  const mobileSheetSnapOrder = useMemo(
+    () =>
+      [
+        mobileSheetHeights.peek,
+        mobileSheetHeights.half,
+        mobileSheetHeights.full,
+      ] as const,
+    [mobileSheetHeights]
+  );
+  const mobileMapBottomOffset = isDesktop ? 16 : mobileSheetHeight + 14;
 
   useEffect(() => {
     const stored = window.localStorage.getItem("smart-campus-locale");
@@ -407,6 +451,30 @@ export default function UniMapApp() {
       setIsResizing(false);
     }
   }, [isDesktop]);
+
+  useEffect(() => {
+    if (isDesktop) return;
+
+    const updateViewportHeight = () => setViewportHeight(window.innerHeight);
+
+    updateViewportHeight();
+    window.addEventListener("resize", updateViewportHeight);
+
+    return () => window.removeEventListener("resize", updateViewportHeight);
+  }, [isDesktop]);
+
+  useEffect(() => {
+    if (isDesktop || !viewportHeight) return;
+
+    setMobileSheetHeight((current) => {
+      const nextHeight =
+        current === 0
+          ? mobileSheetHeights.peek
+          : clamp(current, mobileSheetHeights.peek, mobileSheetHeights.full);
+
+      return nextHeight;
+    });
+  }, [isDesktop, mobileSheetHeights, viewportHeight]);
 
   useEffect(() => {
     if (!isResizing || !isDesktop) return;
@@ -532,6 +600,117 @@ export default function UniMapApp() {
       setPanel("details");
     },
     [currentFloor, locale, routeProfile, routeStart]
+  );
+
+  const nudgeMobileSheet = useCallback(
+    (direction: "up" | "down") => {
+      const currentHeight = getNearestSnapHeight(
+        mobileSheetHeight,
+        [...mobileSheetSnapOrder]
+      );
+      const currentIndex = mobileSheetSnapOrder.findIndex(
+        (value) => value === currentHeight
+      );
+      const nextIndex =
+        direction === "up"
+          ? Math.min(currentIndex + 1, mobileSheetSnapOrder.length - 1)
+          : Math.max(currentIndex - 1, 0);
+
+      setMobileSheetHeight(mobileSheetSnapOrder[nextIndex]);
+      if (direction === "up") {
+        mobileSheetContentRef.current?.scrollTo({ top: 0, behavior: "smooth" });
+      }
+    },
+    [mobileSheetHeight, mobileSheetSnapOrder]
+  );
+
+  const finishMobileSheetDrag = useCallback(() => {
+    mobileSheetPointerRef.current = null;
+    setIsMobileSheetDragging(false);
+    setMobileSheetHeight((current) =>
+      getNearestSnapHeight(current, [...mobileSheetSnapOrder])
+    );
+  }, [mobileSheetSnapOrder]);
+
+  const handleMobileSheetPointerDown = useCallback(
+    (event: React.PointerEvent<HTMLDivElement>) => {
+      if (isDesktop) return;
+
+      event.preventDefault();
+      mobileSheetPointerRef.current = {
+        pointerId: event.pointerId,
+        startY: event.clientY,
+        startHeight: mobileSheetHeight,
+      };
+      setIsMobileSheetDragging(true);
+      event.currentTarget.setPointerCapture(event.pointerId);
+    },
+    [isDesktop, mobileSheetHeight]
+  );
+
+  const handleMobileSheetPointerMove = useCallback(
+    (event: React.PointerEvent<HTMLDivElement>) => {
+      const drag = mobileSheetPointerRef.current;
+      if (!drag || drag.pointerId !== event.pointerId) return;
+
+      const delta = drag.startY - event.clientY;
+      setMobileSheetHeight(
+        clamp(
+          drag.startHeight + delta,
+          mobileSheetHeights.peek,
+          mobileSheetHeights.full
+        )
+      );
+    },
+    [mobileSheetHeights]
+  );
+
+  const handleMobileSheetPointerUp = useCallback(
+    (event: React.PointerEvent<HTMLDivElement>) => {
+      const drag = mobileSheetPointerRef.current;
+      if (!drag || drag.pointerId !== event.pointerId) return;
+
+      if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+        event.currentTarget.releasePointerCapture(event.pointerId);
+      }
+
+      finishMobileSheetDrag();
+    },
+    [finishMobileSheetDrag]
+  );
+
+  const handleMobileSheetWheel = useCallback(
+    (event: React.WheelEvent<HTMLDivElement>) => {
+      if (isDesktop) return;
+
+      const content = mobileSheetContentRef.current;
+      const scrollingUp = event.deltaY < 0;
+      const scrollingDown = event.deltaY > 0;
+      const atTop = !content || content.scrollTop <= 0;
+
+      if (scrollingUp && mobileSheetHeight < mobileSheetHeights.full - 4) {
+        event.preventDefault();
+        setMobileSheetHeight((current) =>
+          clamp(
+            current + Math.abs(event.deltaY),
+            mobileSheetHeights.peek,
+            mobileSheetHeights.full
+          )
+        );
+      }
+
+      if (scrollingDown && atTop && mobileSheetHeight > mobileSheetHeights.peek + 4) {
+        event.preventDefault();
+        setMobileSheetHeight((current) =>
+          clamp(
+            current - Math.abs(event.deltaY),
+            mobileSheetHeights.peek,
+            mobileSheetHeights.full
+          )
+        );
+      }
+    },
+    [isDesktop, mobileSheetHeight, mobileSheetHeights]
   );
 
   const renderSiteResourceLinks = (site: CampusSite) => {
@@ -1014,108 +1193,127 @@ export default function UniMapApp() {
     return renderDetailsPanel();
   };
 
+  const renderSidebarContent = () => (
+    <>
+      <div className="rounded-[28px] border border-border bg-card p-4 shadow-sm">
+        <p className="text-xs uppercase tracking-[0.24em] text-primary">
+          {outdoorCopy.universityTitle}
+        </p>
+        <h1 className="mt-3 text-xl font-semibold">
+          {text(UNIVERSITY.name, locale)}
+        </h1>
+        <p className="mt-2 text-sm text-muted-foreground">
+          {outdoorCopy.universitySubtitle}
+        </p>
+        <p className="mt-2 text-sm text-muted-foreground">
+          {text(UNIVERSITY.address, locale)}
+        </p>
+
+        <div className="mt-4 grid gap-3 sm:grid-cols-2">
+          <div>
+            <p className="mb-2 text-xs uppercase tracking-[0.18em] text-muted-foreground">
+              {copy.language}
+            </p>
+            <div className="flex rounded-2xl border border-border bg-background p-1">
+              {(["ru", "kk"] as Locale[]).map((value) => (
+                <button
+                  key={value}
+                  type="button"
+                  onClick={() => setLocale(value)}
+                  className={cn(
+                    "flex-1 rounded-xl px-3 py-2 text-sm font-medium transition-colors",
+                    locale === value
+                      ? "bg-primary text-primary-foreground"
+                      : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                  )}
+                >
+                  <Globe2 className="mr-2 inline h-4 w-4" />
+                  {value === "ru" ? copy.localeRu : copy.localeKk}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <p className="mb-2 text-xs uppercase tracking-[0.18em] text-muted-foreground">
+              {copy.theme}
+            </p>
+            <button
+              type="button"
+              onClick={() => setTheme(activeTheme === "dark" ? "light" : "dark")}
+              className="flex w-full items-center justify-between rounded-2xl border border-border bg-background px-4 py-3 text-sm font-medium transition-colors hover:bg-muted"
+            >
+              {activeTheme === "dark" ? (
+                <Moon className="h-4 w-4" />
+              ) : (
+                <SunMedium className="h-4 w-4" />
+              )}
+              <span>{activeTheme === "dark" ? copy.dark : copy.light}</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <SearchBar locale={locale} onSelect={focusRoom} />
+
+      <div className="grid grid-cols-2 gap-2">
+        {PANEL_META.map(({ id, icon: Icon }) => (
+          <button
+            key={id}
+            type="button"
+            onClick={() => setPanel(id)}
+            className={cn(
+              "rounded-2xl px-4 py-2.5 text-left text-sm font-medium transition-colors",
+              panel === id
+                ? "bg-primary text-primary-foreground"
+                : "border border-border bg-card hover:bg-muted"
+            )}
+          >
+            <Icon className="mr-2 inline h-4 w-4" />
+            {panelLabelsWithSettings[id]}
+          </button>
+        ))}
+      </div>
+
+      <div
+        className={cn(
+          "min-h-0 flex-1",
+          isDesktop
+            ? "pb-6"
+            : "pb-[calc(env(safe-area-inset-bottom)+1.25rem)]"
+        )}
+      >
+        {renderPanel()}
+      </div>
+    </>
+  );
+
   return (
     <div className="min-h-screen bg-background text-foreground">
       <div
         ref={gridRef}
-        className="grid min-h-screen lg:h-[100dvh] lg:grid-cols-[390px_minmax(0,1fr)] lg:overflow-hidden"
+        className={cn(
+          "relative min-h-screen",
+          isDesktop &&
+            "grid lg:h-[100dvh] lg:grid-cols-[390px_minmax(0,1fr)] lg:overflow-hidden"
+        )}
         style={gridStyle}
       >
-        <aside className="relative border-b border-border bg-background/95 px-4 py-4 backdrop-blur lg:min-h-0 lg:border-b-0 lg:border-r lg:px-5 lg:py-5 group/sidebar">
-          <div className="flex h-full min-h-0 flex-col gap-3 overflow-y-auto pr-1 lg:pr-2">
-            <div className="rounded-[28px] border border-border bg-card p-4 shadow-sm">
-              <p className="text-xs uppercase tracking-[0.24em] text-primary">{outdoorCopy.universityTitle}</p>
-              <h1 className="mt-3 text-xl font-semibold">{text(UNIVERSITY.name, locale)}</h1>
-              <p className="mt-2 text-sm text-muted-foreground">{outdoorCopy.universitySubtitle}</p>
-              <p className="mt-2 text-sm text-muted-foreground">{text(UNIVERSITY.address, locale)}</p>
-
-              <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                <div>
-                  <p className="mb-2 text-xs uppercase tracking-[0.18em] text-muted-foreground">{copy.language}</p>
-                  <div className="flex rounded-2xl border border-border bg-background p-1">
-                    {(["ru", "kk"] as Locale[]).map((value) => (
-                      <button
-                        key={value}
-                        type="button"
-                        onClick={() => setLocale(value)}
-                        className={cn(
-                          "flex-1 rounded-xl px-3 py-2 text-sm font-medium transition-colors",
-                          locale === value
-                            ? "bg-primary text-primary-foreground"
-                            : "text-muted-foreground hover:bg-muted hover:text-foreground"
-                        )}
-                      >
-                        <Globe2 className="mr-2 inline h-4 w-4" />
-                        {value === "ru" ? copy.localeRu : copy.localeKk}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                <div>
-                  <p className="mb-2 text-xs uppercase tracking-[0.18em] text-muted-foreground">{copy.theme}</p>
-                  <button
-                    type="button"
-                    onClick={() => setTheme(activeTheme === "dark" ? "light" : "dark")}
-                    className="flex w-full items-center justify-between rounded-2xl border border-border bg-background px-4 py-3 text-sm font-medium transition-colors hover:bg-muted"
-                  >
-                    {activeTheme === "dark" ? <Moon className="h-4 w-4" /> : <SunMedium className="h-4 w-4" />}
-                    <span>{activeTheme === "dark" ? copy.dark : copy.light}</span>
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            <SearchBar locale={locale} onSelect={focusRoom} />
-
-            <div className="grid grid-cols-2 gap-2">
-              {PANEL_META.map(({ id, icon: Icon }) => (
-                <button
-                  key={id}
-                  type="button"
-                  onClick={() => setPanel(id)}
-                  className={cn(
-                    "rounded-2xl px-4 py-2.5 text-left text-sm font-medium transition-colors",
-                    panel === id
-                      ? "bg-primary text-primary-foreground"
-                      : "border border-border bg-card hover:bg-muted"
-                  )}
-                >
-                  <Icon className="mr-2 inline h-4 w-4" />
-                  {panelLabelsWithSettings[id]}
-                </button>
-              ))}
-            </div>
-
-            <div className="min-h-0 flex-1 pb-6">{renderPanel()}</div>
-          </div>
-
-          {isDesktop ? (
-            <div
-              role="separator"
-              aria-orientation="vertical"
-              aria-label={outdoorCopy.resizeSidebar}
-              className="absolute inset-y-0 -right-3 z-20 hidden w-6 cursor-col-resize items-center justify-center lg:flex"
-              onMouseDown={(event) => {
-                event.preventDefault();
-                setIsResizing(true);
-              }}
-              onDoubleClick={() => setSidebarWidth(390)}
-            >
-              <div
-                className={cn(
-                  "flex h-16 w-4 items-center justify-center rounded-full border border-border bg-background/90 text-muted-foreground shadow transition-all opacity-0 group-hover/sidebar:opacity-100 hover:opacity-100",
-                  isResizing && "opacity-100"
-                )}
-              >
-                <ArrowLeftRight className="h-4 w-4" />
-              </div>
-            </div>
-          ) : null}
-        </aside>
-
-        <main className="p-4 lg:min-h-0 lg:p-6">
-          <div className="relative h-full min-h-[560px] overflow-hidden rounded-[34px] border border-border bg-card shadow-2xl">
+        <main
+          className={cn(
+            isDesktop
+              ? "p-4 lg:order-2 lg:min-h-0 lg:p-6"
+              : "fixed inset-0 z-0 p-0"
+          )}
+        >
+          <div
+            className={cn(
+              "relative h-full overflow-hidden bg-card",
+              isDesktop
+                ? "min-h-[560px] rounded-[34px] border border-border shadow-2xl"
+                : "min-h-[100svh] rounded-none"
+            )}
+          >
             {isIndoor ? (
               <IndoorMap
                 locale={locale}
@@ -1233,7 +1431,10 @@ export default function UniMapApp() {
               </div>
             </div>
 
-            <div className="pointer-events-none absolute inset-x-4 bottom-4 flex flex-col gap-3 xl:flex-row xl:items-end xl:justify-between">
+            <div
+              className="pointer-events-none absolute inset-x-4 flex flex-col gap-3 xl:flex-row xl:items-end xl:justify-between"
+              style={{ bottom: mobileMapBottomOffset }}
+            >
               <div className="pointer-events-auto rounded-[24px] bg-background/90 px-4 py-3 shadow-lg backdrop-blur">
                 {isIndoor ? (
                   <div className="flex flex-wrap items-center gap-4 text-sm">
@@ -1291,12 +1492,121 @@ export default function UniMapApp() {
             </div>
 
             {geoError ? (
-              <div className="absolute bottom-4 right-4 rounded-full bg-destructive px-4 py-2 text-xs font-medium text-destructive-foreground shadow-lg">
+              <div
+                className="absolute right-4 rounded-full bg-destructive px-4 py-2 text-xs font-medium text-destructive-foreground shadow-lg"
+                style={{ bottom: mobileMapBottomOffset }}
+              >
                 {geoError}
               </div>
             ) : null}
           </div>
         </main>
+
+        <aside
+          className={cn(
+            isDesktop
+              ? "relative z-10 lg:order-1 border-r border-border bg-background/95 backdrop-blur group/sidebar"
+              : "fixed inset-x-0 bottom-0 z-30 flex flex-col overflow-hidden rounded-t-[32px] border border-border bg-background/95 shadow-[0_-20px_50px_rgba(15,23,42,0.22)] backdrop-blur supports-[backdrop-filter]:bg-background/88"
+          )}
+          style={!isDesktop ? { height: mobileSheetHeight } : undefined}
+        >
+          {isDesktop ? (
+            <>
+              <div className="flex h-full min-h-0 flex-col gap-3 overflow-y-auto px-4 py-4 pr-2 xl:px-5 xl:py-5">
+                {renderSidebarContent()}
+              </div>
+
+              <div
+                role="separator"
+                aria-orientation="vertical"
+                aria-label={outdoorCopy.resizeSidebar}
+                className="absolute inset-y-0 -right-3 z-20 hidden w-6 cursor-col-resize items-center justify-center lg:flex"
+                onMouseDown={(event) => {
+                  event.preventDefault();
+                  setIsResizing(true);
+                }}
+                onDoubleClick={() => setSidebarWidth(390)}
+              >
+                <div
+                  className={cn(
+                    "flex h-16 w-4 items-center justify-center rounded-full border border-border bg-background/90 text-muted-foreground shadow transition-all opacity-0 group-hover/sidebar:opacity-100 hover:opacity-100",
+                    isResizing && "opacity-100"
+                  )}
+                >
+                  <ArrowLeftRight className="h-4 w-4" />
+                </div>
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="border-b border-border/80 px-4 pb-3 pt-3">
+                <div className="flex items-center justify-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => nudgeMobileSheet("down")}
+                    disabled={mobileSheetHeight <= mobileSheetHeights.peek + 6}
+                    className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-border bg-card text-muted-foreground shadow-sm transition-colors hover:bg-muted disabled:opacity-40"
+                  >
+                    <ChevronDown className="h-4 w-4" />
+                  </button>
+
+                  <div
+                    className={cn(
+                      "rounded-full border border-border bg-card px-5 py-3 shadow-sm touch-none transition-colors",
+                      isMobileSheetDragging && "bg-muted"
+                    )}
+                    onPointerDown={handleMobileSheetPointerDown}
+                    onPointerMove={handleMobileSheetPointerMove}
+                    onPointerUp={handleMobileSheetPointerUp}
+                    onPointerCancel={handleMobileSheetPointerUp}
+                  >
+                    <div className="h-1.5 w-14 rounded-full bg-muted-foreground/40" />
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => nudgeMobileSheet("up")}
+                    disabled={mobileSheetHeight >= mobileSheetHeights.full - 6}
+                    className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-border bg-card text-muted-foreground shadow-sm transition-colors hover:bg-muted disabled:opacity-40"
+                  >
+                    <ChevronUp className="h-4 w-4" />
+                  </button>
+                </div>
+
+                <div className="mt-3 flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="text-xs uppercase tracking-[0.18em] text-primary">
+                      {panelLabelsWithSettings[panel]}
+                    </p>
+                    <p className="mt-1 text-sm font-semibold text-foreground">
+                      {locale === "ru"
+                        ? "Панель кампуса"
+                        : "Кампус панелі"}
+                    </p>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      {locale === "ru"
+                        ? "Тяните вверх или вниз, чтобы открыть карту и контент в нужной пропорции."
+                        : "Карта мен контенттің арақатынасын өзгерту үшін панельді жоғары не төмен тартыңыз."}
+                    </p>
+                  </div>
+                  <Badge variant="secondary">
+                    {Math.round((mobileSheetHeight / mobileSheetHeights.full) * 100)}%
+                  </Badge>
+                </div>
+              </div>
+
+              <div
+                ref={mobileSheetContentRef}
+                onWheel={handleMobileSheetWheel}
+                className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pt-3"
+              >
+                <div className="flex min-h-full flex-col gap-3">
+                  {renderSidebarContent()}
+                </div>
+              </div>
+            </>
+          )}
+        </aside>
       </div>
     </div>
   );
