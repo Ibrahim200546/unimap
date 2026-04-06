@@ -1,6 +1,6 @@
-'use client'
+"use client";
 
-import { useState } from 'react'
+import { useMemo, useState } from "react";
 import {
   Bell,
   CalendarClock,
@@ -9,103 +9,184 @@ import {
   MessageSquareText,
   PackageSearch,
   Soup,
-} from 'lucide-react'
+} from "lucide-react";
 
-import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Textarea } from '@/components/ui/textarea'
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import {
   BOOKING_SLOTS,
   CAMPUS_NEWS,
   DINING_MENU,
   LOST_AND_FOUND_ITEMS,
   TODAY_SCHEDULE,
-} from '@/lib/campus-data'
-import { getRoomById } from '@/lib/building-data'
-import { cn } from '@/lib/utils'
+} from "@/lib/campus-data";
+import { getRoomById, getRoomDisplayName } from "@/lib/building-data";
+import type { Locale } from "@/lib/i18n";
+import { text } from "@/lib/i18n";
 
 interface CampusServicesPanelProps {
-  onOpenRouteToRoom: (roomId: string) => void
+  locale: Locale;
+  onOpenRouteToRoom: (roomId: string) => void;
 }
+
+type ServiceView =
+  | "schedule"
+  | "news"
+  | "dining"
+  | "booking"
+  | "lost"
+  | "feedback";
 
 interface FeedbackFormState {
-  topic: string
-  message: string
+  topic: string;
+  message: string;
 }
 
+const SERVICES_COPY = {
+  ru: {
+    title: "Сервисы кампуса",
+    subtitle: "Открывайте только нужный сервис, а маршрут до точки стройте в один клик.",
+    route: "Маршрут",
+    find: "Найти",
+    reserve: "Забронировать",
+    reserved: "Забронировано",
+    done: "Готово",
+    available: "Доступно",
+    busy: "Занято",
+    important: "Важно",
+    fresh: "Новое",
+    update: "Обновление",
+    take: "Можно забрать",
+    processing: "В обработке",
+    send: "Отправить обращение",
+    accepted: "Принято в сервисный центр",
+    responseHint: "Ответ придёт в приложение и на почту.",
+    topicPlaceholder: "Тема обращения",
+    messagePlaceholder: "Опишите проблему, вопрос или пожелание",
+    tabs: {
+      schedule: "Расписание",
+      news: "Новости",
+      dining: "Столовая",
+      booking: "Бронирование",
+      lost: "Lost & Found",
+      feedback: "Обращения",
+    },
+    headings: {
+      schedule: "Ближайшие занятия",
+      news: "Новости и объявления",
+      dining: "Меню столовой",
+      booking: "Бронирование аудиторий",
+      lost: "Бюро находок",
+      feedback: "Обратная связь",
+    },
+  },
+  kk: {
+    title: "Кампус сервистері",
+    subtitle: "Тек керекті сервисті ашыңыз, ал нүктеге маршрутты бір батырмамен құрыңыз.",
+    route: "Маршрут",
+    find: "Табу",
+    reserve: "Броньдау",
+    reserved: "Броньдалды",
+    done: "Дайын",
+    available: "Қолжетімді",
+    busy: "Бос емес",
+    important: "Маңызды",
+    fresh: "Жаңа",
+    update: "Жаңарту",
+    take: "Алып кетуге болады",
+    processing: "Өңделуде",
+    send: "Өтініш жіберу",
+    accepted: "Қызмет орталығына қабылданды",
+    responseHint: "Жауап қосымшаға және поштаға келеді.",
+    topicPlaceholder: "Өтініш тақырыбы",
+    messagePlaceholder: "Мәселені, сұрақты немесе ұсынысты жазыңыз",
+    tabs: {
+      schedule: "Кесте",
+      news: "Жаңалықтар",
+      dining: "Асхана",
+      booking: "Бронь",
+      lost: "Табылған заттар",
+      feedback: "Өтініштер",
+    },
+    headings: {
+      schedule: "Жақын сабақтар",
+      news: "Жаңалықтар мен хабарламалар",
+      dining: "Асхана мәзірі",
+      booking: "Аудитория броні",
+      lost: "Табылған заттар бөлімі",
+      feedback: "Кері байланыс",
+    },
+  },
+} as const;
+
 export default function CampusServicesPanel({
+  locale,
   onOpenRouteToRoom,
 }: CampusServicesPanelProps) {
-  const [reservedSlots, setReservedSlots] = useState<string[]>([])
+  const copy = SERVICES_COPY[locale];
+  const [activeView, setActiveView] = useState<ServiceView>("schedule");
+  const [reservedSlots, setReservedSlots] = useState<string[]>([]);
   const [feedbackForm, setFeedbackForm] = useState<FeedbackFormState>({
-    topic: '',
-    message: '',
-  })
-  const [feedbackSent, setFeedbackSent] = useState(false)
+    topic: "",
+    message: "",
+  });
+  const [feedbackSent, setFeedbackSent] = useState(false);
+
+  const tabs = useMemo(
+    () => [
+      { id: "schedule" as const, icon: CalendarClock, label: copy.tabs.schedule },
+      { id: "news" as const, icon: Bell, label: copy.tabs.news },
+      { id: "dining" as const, icon: Soup, label: copy.tabs.dining },
+      { id: "booking" as const, icon: CalendarClock, label: copy.tabs.booking },
+      { id: "lost" as const, icon: PackageSearch, label: copy.tabs.lost },
+      { id: "feedback" as const, icon: MessageSquareText, label: copy.tabs.feedback },
+    ],
+    [copy]
+  );
 
   const handleReserve = (slotId: string) => {
     setReservedSlots((current) =>
       current.includes(slotId) ? current : [...current, slotId]
-    )
-  }
+    );
+  };
 
   const handleFeedbackSubmit = () => {
-    if (!feedbackForm.topic.trim() || !feedbackForm.message.trim()) return
+    if (!feedbackForm.topic.trim() || !feedbackForm.message.trim()) return;
 
-    setFeedbackSent(true)
-    setFeedbackForm({ topic: '', message: '' })
-  }
+    setFeedbackSent(true);
+    setFeedbackForm({ topic: "", message: "" });
+  };
 
-  return (
-    <div className="rounded-[28px] border border-border bg-card/95 p-4 shadow-2xl backdrop-blur max-h-[72vh] overflow-y-auto space-y-4">
-      <section className="rounded-2xl border border-border bg-background/70 p-4">
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <p className="text-xs uppercase tracking-[0.24em] text-muted-foreground">
-              Smart Campus
-            </p>
-            <h2 className="mt-2 text-lg font-semibold text-foreground">
-              Сервисы кампуса в одном месте
-            </h2>
-            <p className="mt-2 text-sm text-muted-foreground">
-              Проверяй события, бронируй комнаты и сразу строй маршрут до нужной
-              точки без переключения между экранами.
-            </p>
-          </div>
-          <Badge className="shrink-0" variant="secondary">
-            6 сервисов
-          </Badge>
-        </div>
-      </section>
-
-      <section className="rounded-2xl border border-border bg-background/70 p-4 space-y-3">
-        <div className="flex items-center gap-2">
-          <CalendarClock className="h-4 w-4 text-primary" />
+  const renderContent = () => {
+    if (activeView === "schedule") {
+      return (
+        <div className="space-y-3">
           <h3 className="text-sm font-semibold text-foreground">
-            Ближайшие занятия
+            {copy.headings.schedule}
           </h3>
-        </div>
-        <div className="space-y-2">
           {TODAY_SCHEDULE.map((item) => {
-            const room = getRoomById(item.roomId)
+            const room = getRoomById(item.roomId);
 
             return (
               <div
                 key={item.id}
-                className="rounded-xl border border-border bg-card px-3 py-3"
+                className="rounded-2xl border border-border bg-background/70 p-4"
               >
-                <div className="flex items-center justify-between gap-3">
+                <div className="flex items-start justify-between gap-3">
                   <div>
-                    <p className="text-sm font-medium text-foreground">
-                      {item.title}
+                    <p className="text-sm font-semibold text-foreground">
+                      {text(item.title, locale)}
                     </p>
                     <p className="mt-1 text-xs text-muted-foreground">
                       {item.time} · {item.group} · {item.teacher}
                     </p>
-                    <p className="mt-2 text-xs text-foreground/80">
-                      {room?.name ?? item.roomId}
-                    </p>
+                    {room ? (
+                      <p className="mt-2 text-xs text-foreground/80">
+                        {getRoomDisplayName(room, locale)}
+                      </p>
+                    ) : null}
                   </div>
                   <Button
                     size="sm"
@@ -114,128 +195,129 @@ export default function CampusServicesPanel({
                     type="button"
                   >
                     <MapPinned className="h-4 w-4" />
-                    Маршрут
+                    {copy.route}
                   </Button>
                 </div>
               </div>
-            )
+            );
           })}
         </div>
-      </section>
+      );
+    }
 
-      <section className="rounded-2xl border border-border bg-background/70 p-4 space-y-3">
-        <div className="flex items-center gap-2">
-          <Bell className="h-4 w-4 text-primary" />
+    if (activeView === "news") {
+      return (
+        <div className="space-y-3">
           <h3 className="text-sm font-semibold text-foreground">
-            Новости и объявления
+            {copy.headings.news}
           </h3>
-        </div>
-        <div className="space-y-2">
           {CAMPUS_NEWS.map((item) => (
             <div
               key={item.id}
-              className="rounded-xl border border-border bg-card px-3 py-3"
+              className="rounded-2xl border border-border bg-background/70 p-4"
             >
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <p className="text-sm font-medium text-foreground">
-                    {item.title}
+                  <p className="text-sm font-semibold text-foreground">
+                    {text(item.title, locale)}
                   </p>
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    {item.summary}
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    {text(item.summary, locale)}
                   </p>
                 </div>
-                <Badge
-                  variant={item.priority === 'high' ? 'destructive' : 'secondary'}
-                >
-                  {item.priority === 'high'
-                    ? 'Важно'
-                    : item.priority === 'medium'
-                      ? 'Новое'
-                      : 'Обновление'}
+                <Badge variant={item.priority === "high" ? "destructive" : "secondary"}>
+                  {item.priority === "high"
+                    ? copy.important
+                    : item.priority === "medium"
+                    ? copy.fresh
+                    : copy.update}
                 </Badge>
               </div>
-              <p className="mt-2 text-[11px] uppercase tracking-[0.2em] text-muted-foreground">
-                {item.time}
+              <p className="mt-3 text-[11px] uppercase tracking-[0.22em] text-muted-foreground">
+                {text(item.time, locale)}
               </p>
             </div>
           ))}
         </div>
-      </section>
+      );
+    }
 
-      <section className="rounded-2xl border border-border bg-background/70 p-4 space-y-3">
-        <div className="flex items-center gap-2">
-          <Soup className="h-4 w-4 text-primary" />
-          <h3 className="text-sm font-semibold text-foreground">Меню столовой</h3>
-        </div>
-        <div className="space-y-2">
+    if (activeView === "dining") {
+      return (
+        <div className="space-y-3">
+          <h3 className="text-sm font-semibold text-foreground">
+            {copy.headings.dining}
+          </h3>
           {DINING_MENU.map((item) => (
             <div
               key={item.id}
-              className="rounded-xl border border-border bg-card px-3 py-3 flex items-center justify-between gap-3"
+              className="flex items-center justify-between gap-3 rounded-2xl border border-border bg-background/70 p-4"
             >
               <div>
-                <p className="text-sm font-medium text-foreground">{item.name}</p>
-                <div className="mt-1 flex items-center gap-2">
-                  <Badge variant="outline">{item.badge}</Badge>
-                  <span className="text-xs text-muted-foreground">
-                    {item.price}
-                  </span>
+                <p className="text-sm font-semibold text-foreground">
+                  {text(item.name, locale)}
+                </p>
+                <div className="mt-2 flex items-center gap-2">
+                  <Badge variant="outline">{text(item.badge, locale)}</Badge>
+                  <span className="text-xs text-muted-foreground">{item.price}</span>
                 </div>
               </div>
               <Button
                 size="sm"
                 variant="outline"
-                onClick={() => onOpenRouteToRoom('CAFE')}
+                onClick={() => onOpenRouteToRoom("CAFE")}
                 type="button"
               >
                 <MapPinned className="h-4 w-4" />
-                К столовой
+                {copy.route}
               </Button>
             </div>
           ))}
         </div>
-      </section>
+      );
+    }
 
-      <section className="rounded-2xl border border-border bg-background/70 p-4 space-y-3">
-        <div className="flex items-center gap-2">
-          <CalendarClock className="h-4 w-4 text-primary" />
+    if (activeView === "booking") {
+      return (
+        <div className="space-y-3">
           <h3 className="text-sm font-semibold text-foreground">
-            Бронирование аудиторий
+            {copy.headings.booking}
           </h3>
-        </div>
-        <div className="space-y-2">
           {BOOKING_SLOTS.map((slot) => {
-            const isReserved = reservedSlots.includes(slot.id)
+            const isReserved = reservedSlots.includes(slot.id);
 
             return (
               <div
                 key={slot.id}
-                className="rounded-xl border border-border bg-card px-3 py-3"
+                className="rounded-2xl border border-border bg-background/70 p-4"
               >
-                <div className="flex items-center justify-between gap-3">
+                <div className="flex items-start justify-between gap-3">
                   <div>
-                    <div className="flex items-center gap-2">
-                      <p className="text-sm font-medium text-foreground">
-                        {slot.title}
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="text-sm font-semibold text-foreground">
+                        {text(slot.title, locale)}
                       </p>
                       <Badge
                         variant={
-                          slot.status === 'available' ? 'secondary' : 'outline'
+                          isReserved
+                            ? "secondary"
+                            : slot.status === "available"
+                            ? "outline"
+                            : "secondary"
                         }
                       >
                         {isReserved
-                          ? 'Забронировано'
-                          : slot.status === 'available'
-                            ? 'Доступно'
-                            : 'Занято'}
+                          ? copy.reserved
+                          : slot.status === "available"
+                          ? copy.available
+                          : copy.busy}
                       </Badge>
                     </div>
                     <p className="mt-1 text-xs text-muted-foreground">
-                      {slot.timeLabel}
+                      {text(slot.timeLabel, locale)}
                     </p>
                     <p className="mt-2 text-xs text-foreground/80">
-                      {slot.features.join(' · ')}
+                      {slot.features.map((feature) => text(feature, locale)).join(" · ")}
                     </p>
                   </div>
                   <div className="flex flex-col gap-2">
@@ -246,60 +328,54 @@ export default function CampusServicesPanel({
                       type="button"
                     >
                       <MapPinned className="h-4 w-4" />
-                      Найти
+                      {copy.find}
                     </Button>
                     <Button
                       size="sm"
                       onClick={() => handleReserve(slot.id)}
-                      disabled={slot.status === 'busy' || isReserved}
+                      disabled={slot.status === "busy" || isReserved}
                       type="button"
                     >
-                      {isReserved ? 'Готово' : 'Забронировать'}
+                      {isReserved ? copy.done : copy.reserve}
                     </Button>
                   </div>
                 </div>
               </div>
-            )
+            );
           })}
         </div>
-      </section>
+      );
+    }
 
-      <section className="rounded-2xl border border-border bg-background/70 p-4 space-y-3">
-        <div className="flex items-center gap-2">
-          <PackageSearch className="h-4 w-4 text-primary" />
+    if (activeView === "lost") {
+      return (
+        <div className="space-y-3">
           <h3 className="text-sm font-semibold text-foreground">
-            Lost &amp; Found
+            {copy.headings.lost}
           </h3>
-        </div>
-        <div className="space-y-2">
           {LOST_AND_FOUND_ITEMS.map((item) => (
             <div
               key={item.id}
-              className="rounded-xl border border-border bg-card px-3 py-3"
+              className="rounded-2xl border border-border bg-background/70 p-4"
             >
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <p className="text-sm font-medium text-foreground">
-                    {item.title}
+                  <p className="text-sm font-semibold text-foreground">
+                    {text(item.title, locale)}
                   </p>
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    {item.locationNote}
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    {text(item.locationNote, locale)}
                   </p>
-                  <p className="mt-2 text-[11px] uppercase tracking-[0.2em] text-muted-foreground">
-                    {item.reportedAt}
+                  <p className="mt-3 text-[11px] uppercase tracking-[0.22em] text-muted-foreground">
+                    {text(item.reportedAt, locale)}
                   </p>
                 </div>
-                <Badge
-                  className={cn(
-                    item.status === 'ready' && 'bg-accent text-accent-foreground'
-                  )}
-                  variant={item.status === 'new' ? 'secondary' : 'outline'}
-                >
-                  {item.status === 'new'
-                    ? 'Новое'
-                    : item.status === 'processing'
-                      ? 'В обработке'
-                      : 'Можно забрать'}
+                <Badge variant={item.status === "new" ? "secondary" : "outline"}>
+                  {item.status === "new"
+                    ? copy.fresh
+                    : item.status === "processing"
+                    ? copy.processing
+                    : copy.take}
                 </Badge>
               </div>
               {item.roomId ? (
@@ -311,59 +387,107 @@ export default function CampusServicesPanel({
                   type="button"
                 >
                   <MapPinned className="h-4 w-4" />
-                  Открыть точку на карте
+                  {copy.route}
                 </Button>
               ) : null}
             </div>
           ))}
         </div>
-      </section>
+      );
+    }
 
-      <section className="rounded-2xl border border-border bg-background/70 p-4 space-y-3">
-        <div className="flex items-center gap-2">
-          <MessageSquareText className="h-4 w-4 text-primary" />
-          <h3 className="text-sm font-semibold text-foreground">
-            Обратная связь и обращения
-          </h3>
-        </div>
-        <div className="space-y-3">
-          <Input
-            placeholder="Тема обращения"
-            value={feedbackForm.topic}
-            onChange={(event) =>
-              setFeedbackForm((current) => ({
-                ...current,
-                topic: event.target.value,
-              }))
-            }
-          />
-          <Textarea
-            placeholder="Опишите проблему, вопрос или пожелание"
-            value={feedbackForm.message}
-            onChange={(event) =>
-              setFeedbackForm((current) => ({
-                ...current,
-                message: event.target.value,
-              }))
-            }
-          />
-          <div className="flex items-center justify-between gap-3">
-            <Button onClick={handleFeedbackSubmit} type="button">
-              Отправить обращение
-            </Button>
-            {feedbackSent ? (
-              <span className="inline-flex items-center gap-2 text-xs text-accent">
-                <CircleCheckBig className="h-4 w-4" />
-                Принято в сервисный центр
-              </span>
-            ) : (
-              <span className="text-xs text-muted-foreground">
-                Ответ придёт в приложение и на почту.
-              </span>
-            )}
+    return (
+      <div className="space-y-3">
+        <h3 className="text-sm font-semibold text-foreground">
+          {copy.headings.feedback}
+        </h3>
+        <div className="rounded-2xl border border-border bg-background/70 p-4">
+          <div className="space-y-3">
+            <Input
+              placeholder={copy.topicPlaceholder}
+              value={feedbackForm.topic}
+              onChange={(event) =>
+                setFeedbackForm((current) => ({
+                  ...current,
+                  topic: event.target.value,
+                }))
+              }
+            />
+            <Textarea
+              placeholder={copy.messagePlaceholder}
+              value={feedbackForm.message}
+              onChange={(event) =>
+                setFeedbackForm((current) => ({
+                  ...current,
+                  message: event.target.value,
+                }))
+              }
+            />
+            <div className="flex items-center justify-between gap-3">
+              <Button onClick={handleFeedbackSubmit} type="button">
+                {copy.send}
+              </Button>
+              {feedbackSent ? (
+                <span className="inline-flex items-center gap-2 text-xs text-accent">
+                  <CircleCheckBig className="h-4 w-4" />
+                  {copy.accepted}
+                </span>
+              ) : (
+                <span className="text-xs text-muted-foreground">
+                  {copy.responseHint}
+                </span>
+              )}
+            </div>
           </div>
         </div>
-      </section>
+      </div>
+    );
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="rounded-[28px] border border-border bg-card p-5 shadow-xl">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <p className="text-xs uppercase tracking-[0.22em] text-muted-foreground">
+              Smart Campus
+            </p>
+            <h2 className="mt-2 text-lg font-semibold text-foreground">
+              {copy.title}
+            </h2>
+            <p className="mt-2 text-sm text-muted-foreground">{copy.subtitle}</p>
+          </div>
+          <Badge variant="secondary">{tabs.length}</Badge>
+        </div>
+      </div>
+
+      <div className="flex gap-2 overflow-x-auto pb-1">
+        {tabs.map((tab) => {
+          const Icon = tab.icon;
+          const isActive = activeView === tab.id;
+
+          return (
+            <button
+              key={tab.id}
+              onClick={() => setActiveView(tab.id)}
+              className={[
+                "inline-flex shrink-0 items-center gap-2 rounded-2xl border px-4 py-2.5 text-sm font-medium transition-colors",
+                isActive
+                  ? "border-primary bg-primary text-primary-foreground"
+                  : "border-border bg-card text-muted-foreground hover:bg-muted hover:text-foreground",
+              ].join(" ")}
+              type="button"
+            >
+              <Icon className="h-4 w-4" />
+              {tab.label}
+            </button>
+          );
+        })}
+      </div>
+
+      <div className="rounded-[28px] border border-border bg-card p-5 shadow-xl">
+        {renderContent()}
+      </div>
     </div>
-  )
+  );
 }

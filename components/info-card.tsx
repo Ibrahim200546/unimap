@@ -1,4 +1,4 @@
-'use client'
+"use client";
 
 import {
   Accessibility,
@@ -7,96 +7,124 @@ import {
   Navigation,
   Route,
   X,
-} from 'lucide-react'
+} from "lucide-react";
 
-import { Badge } from '@/components/ui/badge'
+import { Badge } from "@/components/ui/badge";
+import type { Locale } from "@/lib/i18n";
 
 interface OutdoorInfoCardProps {
-  mode: 'outdoor'
-  universityName: string
-  distance: string
-  time: string
-  onNavigate: () => void
+  mode: "outdoor";
+  locale: Locale;
+  universityName: string;
+  distance: string;
+  time: string;
+  onNavigate: () => void;
 }
 
 interface IndoorRouteInfoCardProps {
-  mode: 'route'
-  destinationName: string
-  destinationCode?: string
-  distance: string
-  time: string
-  profileLabel: string
-  floorHint?: string
-  steps: string[]
-  onClose: () => void
+  mode: "route";
+  locale: Locale;
+  destinationName: string;
+  destinationCode?: string;
+  distance: string;
+  time: string;
+  profileLabel: string;
+  floorHint?: string;
+  steps: string[];
+  onClose: () => void;
 }
 
 interface IndoorRoomInfoCardProps {
-  mode: 'room'
-  roomName: string
-  roomCode: string
-  roomType: string
-  floor: number
-  description?: string
-  accessible?: boolean
-  onSetStart: () => void
-  onSetDestination: () => void
-  onClose: () => void
+  mode: "room";
+  locale: Locale;
+  roomName: string;
+  roomCode: string;
+  roomType: string;
+  floorLabel: string;
+  description?: string;
+  accessible?: boolean;
+  onSetStart: () => void;
+  onSetDestination: () => void;
+  onClose: () => void;
 }
 
 type InfoCardProps =
   | OutdoorInfoCardProps
   | IndoorRouteInfoCardProps
-  | IndoorRoomInfoCardProps
+  | IndoorRoomInfoCardProps;
+
+const INFO_COPY = {
+  ru: {
+    nearbyText: "Кампус рядом. Можно перейти внутрь и продолжить навигацию по корпусу.",
+    openIndoor: "Открыть карту корпуса",
+    routeSteps: "Шаги маршрута",
+    accessible: "Доступно",
+    makeStart: "Сделать стартом",
+    routeHere: "Маршрут сюда",
+    closeRoute: "Закрыть маршрут",
+    closeRoom: "Закрыть карточку помещения",
+  },
+  kk: {
+    nearbyText: "Кампус жақын. Ішке өтіп, корпус ішіндегі навигацияны жалғастыруға болады.",
+    openIndoor: "Корпус картасын ашу",
+    routeSteps: "Маршрут қадамдары",
+    accessible: "Қолжетімді",
+    makeStart: "Бастау нүктесі ету",
+    routeHere: "Осы жерге маршрут",
+    closeRoute: "Маршрутты жабу",
+    closeRoom: "Бөлме картасын жабу",
+  },
+} as const;
 
 export default function InfoCard(props: InfoCardProps) {
-  if (props.mode === 'outdoor') {
+  const copy = INFO_COPY[props.locale];
+
+  if (props.mode === "outdoor") {
     return (
-      <div className="bg-card rounded-2xl shadow-lg border border-border p-5">
+      <div className="rounded-[28px] border border-border bg-card p-5 shadow-xl">
         <div className="flex items-start gap-4">
-          <div className="flex items-center justify-center w-12 h-12 rounded-xl bg-primary/10 shrink-0">
-            <MapPin className="w-6 h-6 text-primary" />
+          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-primary/10">
+            <MapPin className="h-6 w-6 text-primary" />
           </div>
-          <div className="flex-1 min-w-0">
-            <h3 className="text-base font-semibold text-foreground truncate">
+          <div className="min-w-0 flex-1">
+            <h3 className="truncate text-base font-semibold text-foreground">
               {props.universityName}
             </h3>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Кампус рядом. Можно войти в корпус и продолжить навигацию внутри.
-            </p>
-            <div className="flex items-center gap-3 mt-3">
-              <span className="flex items-center gap-1 text-sm text-muted-foreground">
-                <Navigation className="w-3.5 h-3.5" />
+            <p className="mt-1 text-sm text-muted-foreground">{copy.nearbyText}</p>
+            <div className="mt-3 flex items-center gap-3 text-sm text-muted-foreground">
+              <span className="inline-flex items-center gap-1">
+                <Navigation className="h-3.5 w-3.5" />
                 {props.distance}
               </span>
-              <span className="flex items-center gap-1 text-sm text-muted-foreground">
-                <Clock className="w-3.5 h-3.5" />
+              <span className="inline-flex items-center gap-1">
+                <Clock className="h-3.5 w-3.5" />
                 {props.time}
               </span>
             </div>
           </div>
         </div>
+
         <button
           onClick={props.onNavigate}
-          className="w-full mt-4 py-3 rounded-xl bg-primary text-primary-foreground font-medium text-sm hover:opacity-90 transition-opacity"
+          className="mt-4 w-full rounded-2xl bg-primary px-4 py-3 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90"
           type="button"
         >
-          Перейти к навигации в корпусе
+          {copy.openIndoor}
         </button>
       </div>
-    )
+    );
   }
 
-  if (props.mode === 'route') {
+  if (props.mode === "route") {
     return (
-      <div className="bg-card rounded-2xl shadow-lg border border-border p-4 space-y-4">
-        <div className="flex items-start justify-between gap-3">
+      <div className="rounded-[28px] border border-border bg-card p-5 shadow-xl">
+        <div className="flex items-start justify-between gap-4">
           <div className="flex items-start gap-3">
-            <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-accent/10 shrink-0">
-              <Route className="w-5 h-5 text-accent" />
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-accent/10">
+              <Route className="h-5 w-5 text-accent" />
             </div>
             <div>
-              <div className="flex items-center gap-2 flex-wrap">
+              <div className="flex flex-wrap items-center gap-2">
                 <h3 className="text-sm font-semibold text-foreground">
                   {props.destinationName}
                 </h3>
@@ -104,7 +132,7 @@ export default function InfoCard(props: InfoCardProps) {
                   <Badge variant="outline">{props.destinationCode}</Badge>
                 ) : null}
               </div>
-              <div className="flex items-center gap-2 mt-1 flex-wrap">
+              <div className="mt-2 flex flex-wrap items-center gap-2">
                 <Badge variant="secondary">{props.profileLabel}</Badge>
                 {props.floorHint ? (
                   <span className="text-xs text-muted-foreground">
@@ -112,35 +140,31 @@ export default function InfoCard(props: InfoCardProps) {
                   </span>
                 ) : null}
               </div>
-              <div className="flex items-center gap-2 mt-2">
-                <span className="text-xs text-muted-foreground">
-                  {props.distance}
-                </span>
-                <span className="text-xs text-muted-foreground">&middot;</span>
-                <span className="text-xs text-muted-foreground">
-                  {props.time}
-                </span>
+              <div className="mt-3 flex items-center gap-2 text-xs text-muted-foreground">
+                <span>{props.distance}</span>
+                <span>·</span>
+                <span>{props.time}</span>
               </div>
             </div>
           </div>
           <button
             onClick={props.onClose}
-            className="text-muted-foreground hover:text-foreground transition-colors p-1"
-            aria-label="Закрыть маршрут"
+            className="rounded-full p-2 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+            aria-label={copy.closeRoute}
             type="button"
           >
-            <X className="w-4 h-4" />
+            <X className="h-4 w-4" />
           </button>
         </div>
 
-        <div className="rounded-xl border border-border bg-background/70 px-3 py-3">
-          <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
-            Шаги маршрута
+        <div className="mt-4 rounded-2xl border border-border bg-background/70 p-4">
+          <p className="text-xs uppercase tracking-[0.22em] text-muted-foreground">
+            {copy.routeSteps}
           </p>
-          <div className="mt-3 space-y-2">
+          <div className="mt-3 space-y-3">
             {props.steps.map((step, index) => (
               <div key={`${step}-${index}`} className="flex items-start gap-3">
-                <span className="mt-0.5 flex h-5 w-5 items-center justify-center rounded-full bg-primary/10 text-[11px] font-semibold text-primary">
+                <span className="mt-0.5 flex h-6 w-6 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary">
                   {index + 1}
                 </span>
                 <p className="text-sm text-foreground/90">{step}</p>
@@ -149,36 +173,33 @@ export default function InfoCard(props: InfoCardProps) {
           </div>
         </div>
       </div>
-    )
+    );
   }
 
   return (
-    <div className="bg-card rounded-2xl shadow-lg border border-border p-4">
-      <div className="flex items-start justify-between gap-3 mb-3">
+    <div className="rounded-[28px] border border-border bg-card p-5 shadow-xl">
+      <div className="mb-4 flex items-start justify-between gap-4">
         <div className="flex items-start gap-3">
-          <div className="flex items-center justify-center w-11 h-11 rounded-xl bg-primary/10 shrink-0">
-            <span className="text-sm font-bold text-primary">
-              {props.roomCode}
-            </span>
+          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-primary/10">
+            <span className="text-sm font-bold text-primary">{props.roomCode}</span>
           </div>
           <div>
-            <div className="flex items-center gap-2 flex-wrap">
+            <div className="flex flex-wrap items-center gap-2">
               <h3 className="text-sm font-semibold text-foreground">
                 {props.roomName}
               </h3>
               {props.accessible ? (
-                <Badge className="gap-1" variant="secondary">
+                <Badge variant="secondary" className="gap-1">
                   <Accessibility className="h-3 w-3" />
-                  Доступно
+                  {copy.accessible}
                 </Badge>
               ) : null}
             </div>
-            <span className="text-xs text-muted-foreground">
-              {props.roomCode} &middot; {props.floor} этаж &middot;{' '}
-              {props.roomType}
-            </span>
+            <p className="mt-1 text-xs text-muted-foreground">
+              {props.roomCode} · {props.floorLabel} · {props.roomType}
+            </p>
             {props.description ? (
-              <p className="mt-2 text-xs text-muted-foreground max-w-[22rem]">
+              <p className="mt-3 text-sm text-muted-foreground">
                 {props.description}
               </p>
             ) : null}
@@ -186,29 +207,30 @@ export default function InfoCard(props: InfoCardProps) {
         </div>
         <button
           onClick={props.onClose}
-          className="text-muted-foreground hover:text-foreground transition-colors p-1"
-          aria-label="Закрыть карточку помещения"
+          className="rounded-full p-2 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+          aria-label={copy.closeRoom}
           type="button"
         >
-          <X className="w-4 h-4" />
+          <X className="h-4 w-4" />
         </button>
       </div>
-      <div className="flex items-center gap-2">
+
+      <div className="grid gap-2 sm:grid-cols-2">
         <button
           onClick={props.onSetStart}
-          className="flex-1 py-2.5 rounded-xl border border-border text-foreground font-medium text-xs hover:bg-muted transition-colors"
+          className="rounded-2xl border border-border px-4 py-3 text-sm font-medium text-foreground transition-colors hover:bg-muted"
           type="button"
         >
-          Сделать стартом
+          {copy.makeStart}
         </button>
         <button
           onClick={props.onSetDestination}
-          className="flex-1 py-2.5 rounded-xl bg-primary text-primary-foreground font-medium text-xs hover:opacity-90 transition-opacity"
+          className="rounded-2xl bg-primary px-4 py-3 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90"
           type="button"
         >
-          Маршрут сюда
+          {copy.routeHere}
         </button>
       </div>
     </div>
-  )
+  );
 }

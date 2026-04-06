@@ -1,23 +1,39 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Search, X } from "lucide-react";
-import type { Room } from "@/lib/building-data";
+
 import {
+  getFloorLabel,
   getRoomDisplayName,
   getRoomTypeLabel,
   searchRooms,
+  type Room,
 } from "@/lib/building-data";
+import type { Locale } from "@/lib/i18n";
 
 interface SearchBarProps {
+  locale: Locale;
   onSelect: (room: Room) => void;
-  placeholder?: string;
 }
 
-export default function SearchBar({
-  onSelect,
-  placeholder = "Найдите аудиторию, столовую или сервис...",
-}: SearchBarProps) {
+const SEARCH_COPY = {
+  ru: {
+    placeholder: "Найдите аудиторию, столовую или сервис...",
+    aria: "Поиск по кампусу",
+    empty: "Ничего не найдено. Попробуйте номер аудитории или название сервиса.",
+    clear: "Очистить поиск",
+  },
+  kk: {
+    placeholder: "Аудиторияны, асхананы немесе сервисті табыңыз...",
+    aria: "Кампус бойынша іздеу",
+    empty: "Ештеңе табылмады. Аудитория нөмірін немесе сервис атауын қолданып көріңіз.",
+    clear: "Іздеуді тазарту",
+  },
+} as const;
+
+export default function SearchBar({ locale, onSelect }: SearchBarProps) {
+  const copy = SEARCH_COPY[locale];
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<Room[]>([]);
   const [isOpen, setIsOpen] = useState(false);
@@ -25,31 +41,33 @@ export default function SearchBar({
   const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (query.trim().length > 0) {
+    if (query.trim()) {
       setResults(searchRooms(query));
       setIsOpen(true);
-    } else {
-      setResults([]);
-      setIsOpen(false);
+      return;
     }
+
+    setResults([]);
+    setIsOpen(false);
   }, [query]);
 
   useEffect(() => {
-    function handleClickOutside(e: MouseEvent) {
+    const handleClickOutside = (event: MouseEvent) => {
       if (
         containerRef.current &&
-        !containerRef.current.contains(e.target as Node)
+        !containerRef.current.contains(event.target as Node)
       ) {
         setIsOpen(false);
       }
-    }
+    };
+
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
   const handleSelect = (room: Room) => {
     onSelect(room);
-    setQuery(room.label);
+    setQuery(getRoomDisplayName(room, locale));
     setIsOpen(false);
   };
 
@@ -62,71 +80,69 @@ export default function SearchBar({
 
   return (
     <div ref={containerRef} className="relative w-full">
-      <div className="flex items-center bg-card rounded-xl shadow-lg border border-border px-4 py-3">
-        <Search className="w-5 h-5 text-muted-foreground shrink-0" />
+      <div className="flex items-center gap-3 rounded-2xl border border-border bg-card/95 px-4 py-3 shadow-sm backdrop-blur">
+        <Search className="h-5 w-5 shrink-0 text-muted-foreground" />
         <input
           ref={inputRef}
           type="text"
           value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          onFocus={() => query.trim().length > 0 && setIsOpen(true)}
-          placeholder={placeholder}
-          className="flex-1 bg-transparent text-foreground placeholder:text-muted-foreground ml-3 text-sm focus:outline-none"
-          aria-label="Поиск по кампусу"
+          onChange={(event) => setQuery(event.target.value)}
+          onFocus={() => query.trim() && setIsOpen(true)}
+          placeholder={copy.placeholder}
+          className="flex-1 bg-transparent text-sm text-foreground placeholder:text-muted-foreground focus:outline-none"
+          aria-label={copy.aria}
           role="combobox"
           aria-expanded={isOpen}
         />
-        {query && (
+        {query ? (
           <button
             onClick={clear}
-            className="text-muted-foreground hover:text-foreground transition-colors"
-            aria-label="Clear search"
+            className="rounded-full p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+            aria-label={copy.clear}
             type="button"
           >
-            <X className="w-4 h-4" />
+            <X className="h-4 w-4" />
           </button>
-        )}
+        ) : null}
       </div>
 
-      {isOpen && results.length > 0 && (
+      {isOpen && results.length > 0 ? (
         <ul
-          className="absolute top-full left-0 right-0 mt-2 bg-card border border-border rounded-xl shadow-lg overflow-hidden z-50"
+          className="absolute left-0 right-0 top-full z-50 mt-2 overflow-hidden rounded-2xl border border-border bg-card shadow-xl"
           role="listbox"
         >
           {results.map((room) => (
             <li key={room.id}>
               <button
                 onClick={() => handleSelect(room)}
-                  className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-muted transition-colors"
+                className="flex w-full items-start gap-3 px-4 py-3 text-left transition-colors hover:bg-muted"
                 role="option"
                 aria-selected={false}
                 type="button"
               >
-                <span className="flex items-center justify-center w-8 h-8 rounded-lg bg-primary/10 text-primary text-xs font-semibold shrink-0">
-                  {room.label.slice(0, 3)}
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-xs font-semibold text-primary">
+                  {room.label}
                 </span>
-                <div className="flex flex-col">
-                  <span className="text-sm font-medium text-foreground">
-                    {getRoomDisplayName(room)}
+                <span className="flex min-w-0 flex-1 flex-col">
+                  <span className="truncate text-sm font-medium text-foreground">
+                    {getRoomDisplayName(room, locale)}
                   </span>
-                  <span className="text-xs text-muted-foreground">
-                    {room.label} &middot; {room.floor} этаж &middot;{" "}
-                    {getRoomTypeLabel(room.type)}
+                  <span className="truncate text-xs text-muted-foreground">
+                    {getFloorLabel(room.floor, locale)} ·{" "}
+                    {getRoomTypeLabel(room.type, locale)}
                   </span>
-                </div>
+                </span>
               </button>
             </li>
           ))}
         </ul>
-      )}
+      ) : null}
 
-      {isOpen && query.trim().length > 0 && results.length === 0 && (
-        <div className="absolute top-full left-0 right-0 mt-2 bg-card border border-border rounded-xl shadow-lg p-4 z-50">
-          <p className="text-sm text-muted-foreground text-center">
-            Ничего не найдено. Попробуйте номер аудитории или название сервиса.
-          </p>
+      {isOpen && query.trim() && results.length === 0 ? (
+        <div className="absolute left-0 right-0 top-full z-50 mt-2 rounded-2xl border border-border bg-card p-4 shadow-xl">
+          <p className="text-sm text-muted-foreground">{copy.empty}</p>
         </div>
-      )}
+      ) : null}
     </div>
   );
 }

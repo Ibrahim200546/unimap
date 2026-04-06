@@ -10,91 +10,145 @@
 
 @layer base {
   :root {
-    --background: 210 20% 98%;
-    --foreground: 215 25% 15%;
+    --background: 214 30% 97%;
+    --foreground: 222 32% 15%;
     --card: 0 0% 100%;
-    --card-foreground: 215 25% 15%;
+    --card-foreground: 222 32% 15%;
     --popover: 0 0% 100%;
-    --popover-foreground: 215 25% 15%;
-    --primary: 210 70% 45%;
+    --popover-foreground: 222 32% 15%;
+    --primary: 210 85% 53%;
     --primary-foreground: 0 0% 100%;
-    --secondary: 210 15% 93%;
-    --secondary-foreground: 215 25% 15%;
-    --muted: 210 15% 95%;
-    --muted-foreground: 215 10% 45%;
-    --accent: 160 50% 42%;
+    --secondary: 210 20% 93%;
+    --secondary-foreground: 222 32% 15%;
+    --muted: 210 24% 95%;
+    --muted-foreground: 217 14% 47%;
+    --accent: 161 68% 37%;
     --accent-foreground: 0 0% 100%;
-    --destructive: 0 72% 51%;
+    --destructive: 0 72% 52%;
     --destructive-foreground: 0 0% 100%;
-    --border: 210 15% 88%;
-    --input: 210 15% 88%;
-    --ring: 210 70% 45%;
-    --chart-1: 210 70% 45%;
-    --chart-2: 160 50% 42%;
-    --chart-3: 215 25% 15%;
-    --chart-4: 43 74% 66%;
-    --chart-5: 27 87% 67%;
-    --radius: 0.625rem;
-    --sidebar-background: 0 0% 98%;
-    --sidebar-foreground: 240 5.3% 26.1%;
-    --sidebar-primary: 210 70% 45%;
-    --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 210 15% 95%;
-    --sidebar-accent-foreground: 215 25% 15%;
-    --sidebar-border: 210 15% 88%;
-    --sidebar-ring: 210 70% 45%;
+    --border: 214 25% 87%;
+    --input: 214 25% 87%;
+    --ring: 210 85% 53%;
+    --chart-1: 210 85% 53%;
+    --chart-2: 161 68% 37%;
+    --chart-3: 222 32% 15%;
+    --chart-4: 38 92% 56%;
+    --chart-5: 12 86% 62%;
+    --radius: 1rem;
 
-    --map-wall: 215 25% 25%;
-    --map-room: 210 15% 96%;
-    --map-room-hover: 210 30% 90%;
-    --map-corridor: 210 10% 92%;
-    --map-route: 210 70% 45%;
-    --map-highlight: 160 50% 42%;
-    --map-entrance: 160 50% 42%;
-    --map-stairs: 30 60% 55%;
-    --map-restroom: 200 40% 60%;
-    --map-library: 210 45% 50%;
-    --map-cafeteria: 32 60% 52%;
-    --map-lab: 173 50% 38%;
-    --map-service: 108 28% 46%;
-    --map-elevator: 217 18% 45%;
-    --map-office: 215 16% 58%;
+    --map-wall: 218 29% 26%;
+    --map-room: 210 36% 98%;
+    --map-room-hover: 214 32% 92%;
+    --map-corridor: 210 20% 92%;
+    --map-route: 210 85% 53%;
+    --map-highlight: 161 68% 37%;
+    --map-entrance: 161 68% 37%;
+    --map-stairs: 31 91% 47%;
+    --map-restroom: 199 89% 48%;
+    --map-library: 216 91% 60%;
+    --map-cafeteria: 25 95% 53%;
+    --map-lab: 173 80% 32%;
+    --map-service: 84 81% 36%;
+    --map-elevator: 215 16% 47%;
+    --map-office: 221 18% 52%;
   }
-}
 
-@layer base {
+  .dark {
+    --background: 222 28% 10%;
+    --foreground: 210 25% 95%;
+    --card: 223 24% 14%;
+    --card-foreground: 210 25% 95%;
+    --popover: 223 24% 14%;
+    --popover-foreground: 210 25% 95%;
+    --primary: 207 90% 61%;
+    --primary-foreground: 222 42% 10%;
+    --secondary: 222 18% 20%;
+    --secondary-foreground: 210 25% 95%;
+    --muted: 222 18% 18%;
+    --muted-foreground: 217 15% 70%;
+    --accent: 161 70% 42%;
+    --accent-foreground: 0 0% 100%;
+    --destructive: 0 76% 58%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 221 16% 24%;
+    --input: 221 16% 24%;
+    --ring: 207 90% 61%;
+
+    --map-wall: 214 24% 88%;
+    --map-room: 223 22% 18%;
+    --map-room-hover: 223 20% 24%;
+    --map-corridor: 222 18% 16%;
+    --map-route: 207 90% 61%;
+    --map-highlight: 161 70% 42%;
+    --map-entrance: 161 70% 42%;
+    --map-stairs: 35 92% 56%;
+    --map-restroom: 199 89% 58%;
+    --map-library: 216 91% 68%;
+    --map-cafeteria: 26 95% 60%;
+    --map-lab: 173 72% 41%;
+    --map-service: 88 65% 45%;
+    --map-elevator: 215 18% 62%;
+    --map-office: 217 17% 68%;
+  }
+
   * {
     @apply border-border;
   }
+
+  html,
+  body {
+    height: 100%;
+  }
+
   body {
     @apply bg-background text-foreground;
+    background-image:
+      radial-gradient(circle at top left, rgba(59, 130, 246, 0.08), transparent 28%),
+      radial-gradient(circle at bottom right, rgba(16, 185, 129, 0.07), transparent 24%);
   }
 }
 
-/* Leaflet overrides */
+body::-webkit-scrollbar,
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+body::-webkit-scrollbar-thumb,
+*::-webkit-scrollbar-thumb {
+  background: rgba(100, 116, 139, 0.35);
+  border-radius: 999px;
+}
+
+body::-webkit-scrollbar-track,
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
 .leaflet-container {
   width: 100%;
   height: 100%;
   z-index: 0;
+  background: transparent;
 }
 
 .leaflet-control-zoom {
   border: none !important;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12) !important;
-  border-radius: 0.625rem !important;
+  box-shadow: 0 10px 28px rgba(15, 23, 42, 0.16) !important;
+  border-radius: 1rem !important;
   overflow: hidden !important;
 }
 
 .leaflet-control-zoom a {
-  background: hsl(0 0% 100%) !important;
-  color: hsl(215 25% 15%) !important;
+  background: hsl(var(--card)) !important;
+  color: hsl(var(--foreground)) !important;
   border: none !important;
-  width: 36px !important;
-  height: 36px !important;
-  line-height: 36px !important;
+  width: 38px !important;
+  height: 38px !important;
+  line-height: 38px !important;
   font-size: 18px !important;
 }
 
 .leaflet-control-zoom a:hover {
-  background: hsl(210 15% 95%) !important;
+  background: hsl(var(--muted)) !important;
 }

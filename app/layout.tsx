@@ -1,12 +1,13 @@
-import React from "react"
+import React from "react";
 import type { Metadata, Viewport } from "next";
 
+import { ThemeProvider } from "@/components/theme-provider";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "UniMap TDK - University Navigation",
+  title: "Smart Campus UniMap",
   description:
-    "Interactive university navigation app with indoor floor plans and outdoor routing for students.",
+    "Digital navigation and campus services workspace with indoor routing, multilingual UI and theme switching.",
   icons: {
     icon: [{ url: "/favicon.svg", type: "image/svg+xml" }],
     shortcut: "/favicon.ico",
@@ -14,7 +15,7 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#3178c6",
+  themeColor: "#2563eb",
   width: "device-width",
   initialScale: 1,
   maximumScale: 1,
@@ -27,8 +28,16 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
-      <body className="font-sans antialiased overflow-hidden">{children}</body>
+    <html lang="ru" suppressHydrationWarning>
+      <body className="overflow-hidden antialiased">
+        <ThemeProvider
+          attribute="class"
+          defaultTheme="light"
+          enableSystem={false}
+        >
+          {children}
+        </ThemeProvider>
+      </body>
     </html>
   );
 }
