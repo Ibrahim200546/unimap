@@ -2,14 +2,14 @@ import { type Locale, type LocalizedText, text } from "@/lib/i18n";
 
 export const UNIVERSITY = {
   name: {
-    ru: "Smart Campus",
-    kk: "Smart Campus",
+    ru: "Жетісуский государственный университет имени Ильяса Жансугурова",
+    kk: "Ілияс Жансүгіров атындағы Жетісу мемлекеттік университеті",
   },
-  lat: 44.8488,
-  lng: 65.4823,
+  lat: 45.008698,
+  lng: 78.349901,
   address: {
-    ru: "Campus Avenue 1",
-    kk: "Campus Avenue 1",
+    ru: "Талдыкорган, ул. Ильяса Жансугурова, 187а",
+    kk: "Талдықорған, Ілияс Жансүгіров көшесі, 187а",
   },
   proximityRadius: 80,
 };
