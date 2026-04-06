@@ -997,6 +997,11 @@ export default function UniMapApp() {
               const room = getRoomById(roomId);
               if (room) buildRouteTo(room);
             }}
+            campusSites={CAMPUS_SITES}
+            activeOutdoorSiteId={activeOutdoorSiteId}
+            userLat={userLat}
+            userLng={userLng}
+            onSelectOutdoorSite={setActiveOutdoorSiteId}
           />
         </div>
       );

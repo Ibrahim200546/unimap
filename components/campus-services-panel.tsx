@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import {
   Bell,
+  BusFront,
   CalendarClock,
   CircleCheckBig,
   MapPinned,
@@ -11,6 +12,7 @@ import {
   Soup,
 } from "lucide-react";
 
+import CampusTransitPanel from "@/components/campus-transit-panel";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -23,16 +25,23 @@ import {
   TODAY_SCHEDULE,
 } from "@/lib/campus-data";
 import { getRoomById, getRoomDisplayName } from "@/lib/building-data";
+import type { CampusSite } from "@/lib/campus-sites";
 import type { Locale } from "@/lib/i18n";
 import { text } from "@/lib/i18n";
 
 interface CampusServicesPanelProps {
   locale: Locale;
   onOpenRouteToRoom: (roomId: string) => void;
+  campusSites: CampusSite[];
+  activeOutdoorSiteId: string;
+  userLat: number | null;
+  userLng: number | null;
+  onSelectOutdoorSite: (siteId: string) => void;
 }
 
 type ServiceView =
   | "schedule"
+  | "transport"
   | "news"
   | "dining"
   | "booking"
@@ -124,8 +133,16 @@ const SERVICES_COPY = {
 export default function CampusServicesPanel({
   locale,
   onOpenRouteToRoom,
+  campusSites,
+  activeOutdoorSiteId,
+  userLat,
+  userLng,
+  onSelectOutdoorSite,
 }: CampusServicesPanelProps) {
   const copy = SERVICES_COPY[locale];
+  const transportLabel = locale === "ru" ? "Транспорт" : "Көлік";
+  const transportHeading =
+    locale === "ru" ? "Межкорпусной транспорт" : "Корпус аралық көлік";
   const [activeView, setActiveView] = useState<ServiceView>("schedule");
   const [reservedSlots, setReservedSlots] = useState<string[]>([]);
   const [feedbackForm, setFeedbackForm] = useState<FeedbackFormState>({
@@ -137,13 +154,14 @@ export default function CampusServicesPanel({
   const tabs = useMemo(
     () => [
       { id: "schedule" as const, icon: CalendarClock, label: copy.tabs.schedule },
+      { id: "transport" as const, icon: BusFront, label: transportLabel },
       { id: "news" as const, icon: Bell, label: copy.tabs.news },
       { id: "dining" as const, icon: Soup, label: copy.tabs.dining },
       { id: "booking" as const, icon: CalendarClock, label: copy.tabs.booking },
       { id: "lost" as const, icon: PackageSearch, label: copy.tabs.lost },
       { id: "feedback" as const, icon: MessageSquareText, label: copy.tabs.feedback },
     ],
-    [copy]
+    [copy, transportLabel]
   );
 
   const handleReserve = (slotId: string) => {
@@ -238,6 +256,24 @@ export default function CampusServicesPanel({
               </p>
             </div>
           ))}
+        </div>
+      );
+    }
+
+    if (activeView === "transport") {
+      return (
+        <div className="space-y-3">
+          <h3 className="text-sm font-semibold text-foreground">
+            {transportHeading}
+          </h3>
+          <CampusTransitPanel
+            locale={locale}
+            campusSites={campusSites}
+            activeTargetSiteId={activeOutdoorSiteId}
+            userLat={userLat}
+            userLng={userLng}
+            onTargetSiteChange={onSelectOutdoorSite}
+          />
         </div>
       );
     }

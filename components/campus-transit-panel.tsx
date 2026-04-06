@@ -1,0 +1,476 @@
+"use client";
+
+import { useEffect, useMemo, useState } from "react";
+import { BusFront, ExternalLink, LocateFixed, MapPinned, RefreshCcw, Route } from "lucide-react";
+
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import type { CampusTransitResponse } from "@/lib/campus-transit";
+import type { CampusSite } from "@/lib/campus-sites";
+import { estimateOutdoorWalkingTime, haversineDistance } from "@/lib/geo-utils";
+import type { Locale } from "@/lib/i18n";
+import { text } from "@/lib/i18n";
+
+interface CampusTransitPanelProps {
+  locale: Locale;
+  campusSites: CampusSite[];
+  activeTargetSiteId: string;
+  userLat: number | null;
+  userLng: number | null;
+  onTargetSiteChange: (siteId: string) => void;
+}
+
+type SourceChoice = "__user__" | string;
+
+const TRANSIT_COPY = {
+  ru: {
+    title: "Транспорт между корпусами",
+    subtitle:
+      "Live-данные берутся из InfoBus Талдыкоргана и показывают городские автобусы, которые помогают доехать между корпусами кампуса.",
+    from: "Откуда",
+    to: "Куда",
+    currentLocation: "Текущая геопозиция",
+    currentLocationHint: "Использовать точное местоположение студента",
+    noGeolocation: "Геопозиция пока недоступна. Можно считать маршрут от выбранного корпуса.",
+    loading: "Ищем ближайший автобус и пересадки...",
+    empty: "Для этой пары точек InfoBus сейчас не вернул подходящих маршрутов.",
+    samePoint: "Вы уже рядом с выбранным корпусом. Автобус сейчас не нужен.",
+    refresh: "Обновить",
+    nearest: "Ближайший автобус",
+    options: "Варианты проезда",
+    arrivesIn: "Прибудет через",
+    noEta: "Live ETA пока нет",
+    walkToStop: "До остановки",
+    walkFromStop: "От остановки до корпуса",
+    transfers: "Пересадки",
+    stops: "Остановок",
+    routeToCampus: "Показать корпус",
+    openInfobus: "Открыть InfoBus",
+    departureStop: "Посадка",
+    arrivalStop: "Выход",
+    legs: "Этапы",
+    updated: "Обновлено",
+    oneTransfer: "1 пересадка",
+    manyTransfers: "пересадки",
+  },
+  kk: {
+    title: "Корпустар арасындағы көлік",
+    subtitle:
+      "Live-деректер Талдықорғандағы InfoBus сервисінен алынады және кампус корпустары арасында жетуге көмектесетін қалалық автобустарды көрсетеді.",
+    from: "Қайдан",
+    to: "Қайда",
+    currentLocation: "Ағымдағы геопозиция",
+    currentLocationHint: "Студенттің нақты орналасуын қолдану",
+    noGeolocation: "Геопозиция әзір қолжетімсіз. Маршрутты таңдалған корпустан есептеуге болады.",
+    loading: "Ең жақын автобус пен ауысулар ізделіп жатыр...",
+    empty: "Осы екі нүкте үшін InfoBus қазір лайықты маршрут қайтармады.",
+    samePoint: "Сіз таңдалған корпусқа жақынсыз. Қазір автобус қажет емес.",
+    refresh: "Жаңарту",
+    nearest: "Ең жақын автобус",
+    options: "Жол нұсқалары",
+    arrivesIn: "Келеді",
+    noEta: "Live ETA әзір жоқ",
+    walkToStop: "Аялдамаға дейін",
+    walkFromStop: "Аялдамадан корпусқа дейін",
+    transfers: "Ауысу",
+    stops: "Аялдама",
+    routeToCampus: "Корпусты картадан көрсету",
+    openInfobus: "InfoBus ашу",
+    departureStop: "Отыру",
+    arrivalStop: "Түсу",
+    legs: "Кезеңдер",
+    updated: "Жаңартылды",
+    oneTransfer: "1 ауысу",
+    manyTransfers: "ауысу",
+  },
+} as const;
+
+function formatMeters(meters: number, locale: Locale) {
+  if (meters < 1000) {
+    return locale === "ru" ? `${Math.round(meters)} м` : `${Math.round(meters)} м`;
+  }
+
+  return locale === "ru" ? `${(meters / 1000).toFixed(1)} км` : `${(meters / 1000).toFixed(1)} км`;
+}
+
+function formatMinutes(minutes: number | null, locale: Locale) {
+  if (minutes === null) return locale === "ru" ? "нет данных" : "дерек жоқ";
+  if (minutes < 1) return locale === "ru" ? "< 1 мин" : "< 1 мин";
+  return locale === "ru" ? `${Math.round(minutes)} мин` : `${Math.round(minutes)} мин`;
+}
+
+function formatUpdatedAt(value: string, locale: Locale) {
+  return new Intl.DateTimeFormat(locale === "ru" ? "ru-RU" : "kk-KZ", {
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  }).format(new Date(value));
+}
+
+export default function CampusTransitPanel({
+  locale,
+  campusSites,
+  activeTargetSiteId,
+  userLat,
+  userLng,
+  onTargetSiteChange,
+}: CampusTransitPanelProps) {
+  const copy = TRANSIT_COPY[locale];
+  const campusPoints = useMemo(
+    () => campusSites.filter((site): site is CampusSite & { lat: number; lng: number } => site.lat !== undefined && site.lng !== undefined),
+    [campusSites]
+  );
+  const [sourceChoice, setSourceChoice] = useState<SourceChoice>(userLat !== null && userLng !== null ? "__user__" : campusPoints[0]?.id ?? "");
+  const [targetSiteId, setTargetSiteId] = useState(activeTargetSiteId);
+  const [data, setData] = useState<CampusTransitResponse | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [refreshNonce, setRefreshNonce] = useState(0);
+
+  useEffect(() => {
+    setTargetSiteId(activeTargetSiteId);
+  }, [activeTargetSiteId]);
+
+  useEffect(() => {
+    if (sourceChoice === "__user__" && (userLat === null || userLng === null)) {
+      setSourceChoice(campusPoints[0]?.id ?? "");
+    }
+  }, [campusPoints, sourceChoice, userLat, userLng]);
+
+  const targetSite = campusPoints.find((site) => site.id === targetSiteId) ?? campusPoints[0] ?? null;
+  const sourceSite = sourceChoice !== "__user__" ? campusPoints.find((site) => site.id === sourceChoice) ?? null : null;
+  const sourcePoint =
+    sourceChoice === "__user__" && userLat !== null && userLng !== null
+      ? { lat: userLat, lng: userLng, label: copy.currentLocation }
+      : sourceSite
+      ? { lat: sourceSite.lat, lng: sourceSite.lng, label: text(sourceSite.name, locale) }
+      : null;
+
+  const samePoint =
+    sourcePoint && targetSite
+      ? haversineDistance(sourcePoint.lat, sourcePoint.lng, targetSite.lat, targetSite.lng) < 180
+      : false;
+
+  useEffect(() => {
+    if (!sourcePoint || !targetSite || samePoint) {
+      setData(null);
+      return;
+    }
+
+    let cancelled = false;
+
+    const load = async () => {
+      setLoading(true);
+      setError(null);
+
+      try {
+        const params = new URLSearchParams({
+          sourceLat: sourcePoint.lat.toString(),
+          sourceLng: sourcePoint.lng.toString(),
+          targetLat: targetSite.lat.toString(),
+          targetLng: targetSite.lng.toString(),
+        });
+        const response = await fetch(`/api/infobus/campus-transit?${params.toString()}`, {
+          cache: "no-store",
+        });
+
+        if (!response.ok) {
+          throw new Error("Transit fetch failed");
+        }
+
+        const payload = (await response.json()) as CampusTransitResponse;
+        if (!cancelled) {
+          setData(payload);
+        }
+      } catch (fetchError) {
+        if (!cancelled) {
+          setError(fetchError instanceof Error ? fetchError.message : "Transit fetch failed");
+        }
+      } finally {
+        if (!cancelled) {
+          setLoading(false);
+        }
+      }
+    };
+
+    load();
+    const intervalId = window.setInterval(load, 30000);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(intervalId);
+    };
+  }, [refreshNonce, samePoint, sourcePoint?.lat, sourcePoint?.lng, targetSite?.lat, targetSite?.lng]);
+
+  const topOption = data?.options[0] ?? null;
+  const infobusLink =
+    sourcePoint && targetSite
+      ? `https://infobus.kz/cities/2/pathsbwpoints?sourceLat=${sourcePoint.lat}&sourceLng=${sourcePoint.lng}&targetLat=${targetSite.lat}&targetLng=${targetSite.lng}`
+      : "https://infobus.kz/";
+
+  return (
+    <div className="space-y-4">
+      <section className="rounded-[28px] border border-border bg-background/70 p-4">
+        <div className="flex items-start gap-3">
+          <BusFront className="mt-0.5 h-5 w-5 text-primary" />
+          <div className="min-w-0">
+            <h3 className="text-sm font-semibold text-foreground">{copy.title}</h3>
+            <p className="mt-1 text-sm text-muted-foreground">{copy.subtitle}</p>
+          </div>
+        </div>
+      </section>
+
+      <section className="rounded-[28px] border border-border bg-background/70 p-4">
+        <div className="grid gap-4">
+          <div>
+            <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">{copy.from}</p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <button
+                type="button"
+                disabled={userLat === null || userLng === null}
+                onClick={() => setSourceChoice("__user__")}
+                className={[
+                  "rounded-full border px-3 py-2 text-sm font-medium transition-colors disabled:opacity-50",
+                  sourceChoice === "__user__"
+                    ? "border-primary bg-primary text-primary-foreground"
+                    : "border-border bg-card hover:bg-muted",
+                ].join(" ")}
+              >
+                <LocateFixed className="mr-2 inline h-4 w-4" />
+                {copy.currentLocation}
+              </button>
+              {campusPoints.map((site) => (
+                <button
+                  key={`source-${site.id}`}
+                  type="button"
+                  onClick={() => setSourceChoice(site.id)}
+                  className={[
+                    "rounded-full border px-3 py-2 text-sm font-medium transition-colors",
+                    sourceChoice === site.id
+                      ? "border-primary bg-primary text-primary-foreground"
+                      : "border-border bg-card hover:bg-muted",
+                  ].join(" ")}
+                >
+                  {text(site.name, locale)}
+                </button>
+              ))}
+            </div>
+            {userLat === null || userLng === null ? (
+              <p className="mt-3 text-xs text-muted-foreground">{copy.noGeolocation}</p>
+            ) : (
+              <p className="mt-3 text-xs text-muted-foreground">{copy.currentLocationHint}</p>
+            )}
+          </div>
+
+          <div>
+            <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">{copy.to}</p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              {campusPoints.map((site) => (
+                <button
+                  key={`target-${site.id}`}
+                  type="button"
+                  onClick={() => {
+                    setTargetSiteId(site.id);
+                    onTargetSiteChange(site.id);
+                  }}
+                  className={[
+                    "rounded-full border px-3 py-2 text-sm font-medium transition-colors",
+                    targetSiteId === site.id
+                      ? "border-primary bg-primary text-primary-foreground"
+                      : "border-border bg-card hover:bg-muted",
+                  ].join(" ")}
+                >
+                  {text(site.name, locale)}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {samePoint ? (
+        <section className="rounded-[28px] border border-border bg-background/70 p-4">
+          <p className="text-sm text-muted-foreground">{copy.samePoint}</p>
+        </section>
+      ) : null}
+
+      {loading ? (
+        <section className="rounded-[28px] border border-border bg-background/70 p-4">
+          <p className="text-sm text-muted-foreground">{copy.loading}</p>
+        </section>
+      ) : null}
+
+      {error ? (
+        <section className="rounded-[28px] border border-border bg-background/70 p-4">
+          <p className="text-sm font-medium text-destructive">{error}</p>
+        </section>
+      ) : null}
+
+      {!loading && !error && !samePoint && topOption ? (
+        <section className="rounded-[28px] border border-primary/30 bg-primary/10 p-5">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <p className="text-xs uppercase tracking-[0.18em] text-primary">{copy.nearest}</p>
+              <div className="mt-3 flex items-center gap-3">
+                <Badge className="rounded-full px-3 py-1 text-sm" variant="secondary">
+                  {topOption.firstRouteNumber}
+                </Badge>
+                <div>
+                  <p className="text-sm font-semibold text-foreground">{topOption.firstRouteName}</p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {copy.departureStop}: {topOption.departureStopName}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="rounded-2xl bg-card px-4 py-3 shadow-sm">
+              <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">{copy.arrivesIn}</p>
+              <p className="mt-2 text-lg font-semibold">
+                {topOption.nextArrivalSeconds !== null
+                  ? formatMinutes(topOption.nextArrivalSeconds / 60, locale)
+                  : copy.noEta}
+              </p>
+            </div>
+          </div>
+
+          <div className="mt-4 grid gap-3 sm:grid-cols-3">
+            <div className="rounded-2xl bg-card px-4 py-3 shadow-sm">
+              <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">{copy.walkToStop}</p>
+              <p className="mt-2 text-sm font-medium">
+                {formatMeters(topOption.walkingToStopMeters, locale)} •{" "}
+                {formatMinutes(estimateOutdoorWalkingTime(topOption.walkingToStopMeters), locale)}
+              </p>
+            </div>
+            <div className="rounded-2xl bg-card px-4 py-3 shadow-sm">
+              <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">{copy.walkFromStop}</p>
+              <p className="mt-2 text-sm font-medium">
+                {formatMeters(topOption.walkingFromArrivalMeters, locale)} •{" "}
+                {formatMinutes(estimateOutdoorWalkingTime(topOption.walkingFromArrivalMeters), locale)}
+              </p>
+            </div>
+            <div className="rounded-2xl bg-card px-4 py-3 shadow-sm">
+              <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">{copy.transfers}</p>
+              <p className="mt-2 text-sm font-medium">
+                {topOption.transfers === 1
+                  ? copy.oneTransfer
+                  : `${topOption.transfers} ${copy.manyTransfers}`}
+              </p>
+            </div>
+          </div>
+
+          <div className="mt-4 flex flex-wrap gap-2">
+            <Button type="button" variant="outline" onClick={() => onTargetSiteChange(targetSiteId)}>
+              <MapPinned className="h-4 w-4" />
+              {copy.routeToCampus}
+            </Button>
+            <Button asChild type="button">
+              <a href={infobusLink} target="_blank" rel="noreferrer">
+                <ExternalLink className="h-4 w-4" />
+                {copy.openInfobus}
+              </a>
+            </Button>
+          </div>
+
+          {data ? (
+            <p className="mt-4 text-xs text-muted-foreground">
+              {copy.updated}: {formatUpdatedAt(data.updatedAt, locale)}
+            </p>
+          ) : null}
+        </section>
+      ) : null}
+
+      {!loading && !error && !samePoint && data && data.options.length === 0 ? (
+        <section className="rounded-[28px] border border-border bg-background/70 p-4">
+          <p className="text-sm text-muted-foreground">{copy.empty}</p>
+          <Button asChild className="mt-3" type="button" variant="outline">
+            <a href={infobusLink} target="_blank" rel="noreferrer">
+              <ExternalLink className="h-4 w-4" />
+              {copy.openInfobus}
+            </a>
+          </Button>
+        </section>
+      ) : null}
+
+      {!loading && data?.options?.length ? (
+        <section className="rounded-[28px] border border-border bg-background/70 p-4">
+          <div className="flex items-center justify-between gap-3">
+            <h3 className="text-sm font-semibold text-foreground">{copy.options}</h3>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => setRefreshNonce((value) => value + 1)}
+            >
+              <RefreshCcw className="h-4 w-4" />
+              {copy.refresh}
+            </Button>
+          </div>
+
+          <div className="mt-4 space-y-3">
+            {data.options.map((option) => (
+              <div key={option.id} className="rounded-2xl border border-border bg-card p-4">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Badge variant="secondary">{option.firstRouteNumber}</Badge>
+                      <p className="text-sm font-semibold text-foreground">{option.firstRouteName}</p>
+                    </div>
+                    <p className="mt-2 text-xs text-muted-foreground">
+                      {copy.departureStop}: {option.departureStopName}
+                    </p>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      {copy.arrivalStop}: {option.arrivalStopName}
+                    </p>
+                  </div>
+
+                  <div className="text-right">
+                    <p className="text-sm font-semibold text-foreground">
+                      {option.nextArrivalSeconds !== null
+                        ? `${copy.arrivesIn} ${formatMinutes(option.nextArrivalSeconds / 60, locale)}`
+                        : copy.noEta}
+                    </p>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      {copy.stops}: {option.totalStops} • {copy.transfers}: {option.transfers}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                  <div className="rounded-2xl bg-muted/70 px-3 py-2 text-sm text-foreground/85">
+                    {copy.walkToStop}: {formatMeters(option.walkingToStopMeters, locale)}
+                  </div>
+                  <div className="rounded-2xl bg-muted/70 px-3 py-2 text-sm text-foreground/85">
+                    {copy.walkFromStop}: {formatMeters(option.walkingFromArrivalMeters, locale)}
+                  </div>
+                </div>
+
+                <div className="mt-4">
+                  <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">{copy.legs}</p>
+                  <div className="mt-2 space-y-2">
+                    {option.legs.map((leg, index) => (
+                      <div key={`${option.id}-leg-${index}`} className="flex items-start gap-3 rounded-2xl bg-muted/60 px-3 py-3">
+                        <Route className="mt-0.5 h-4 w-4 text-primary" />
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium text-foreground">
+                            {leg.routeNumber} • {leg.routeName}
+                          </p>
+                          <p className="mt-1 text-xs text-muted-foreground">
+                            {leg.departureStopName} → {leg.arrivalStopName}
+                          </p>
+                          <p className="mt-1 text-xs text-muted-foreground">
+                            {copy.stops}: {leg.stopCount}
+                          </p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+      ) : null}
+    </div>
+  );
+}
