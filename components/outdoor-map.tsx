@@ -48,6 +48,7 @@ export default function OutdoorMap({
   const siteLayerRef = useRef<any>(null);
   const siteMarkersRef = useRef<Map<string, any>>(new Map());
   const routeCacheRef = useRef<Map<string, [number, number][]>>(new Map());
+  const lastTransitViewportKeyRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return;
@@ -300,11 +301,19 @@ export default function OutdoorMap({
       }
 
       if (!transitOverlay) {
+        lastTransitViewportKeyRef.current = null;
         return;
       }
 
       const layer = leaflet.layerGroup().addTo(map);
       const option = transitOverlay.option;
+      const transitViewportKey = [
+        transitOverlay.target.siteId,
+        option.id,
+        option.firstRouteId,
+        option.departureStopId,
+        option.arrivalStopId,
+      ].join(":");
       const segment =
         option.routeSegment.length > 1
           ? option.routeSegment.map((point) => [point.lat, point.lng] as [number, number])
@@ -375,7 +384,10 @@ export default function OutdoorMap({
           .addTo(layer)
           .bindPopup(`
             <div style="font-family:Inter,system-ui,sans-serif;min-width:160px;">
-              <div style="font-size:13px;font-weight:700;">${escapeHtml(bus.label)}</div>
+              <div style="font-size:13px;font-weight:700;">${escapeHtml(locale === "ru" ? "Маршрут" : "Маршрут")}: ${escapeHtml(option.firstRouteNumber)}</div>
+              <div style="margin-top:4px;font-size:12px;color:#334155;">
+                ${escapeHtml(locale === "ru" ? "Автобус" : "Автобус")}: ${escapeHtml(bus.label)}
+              </div>
               <div style="margin-top:4px;font-size:12px;color:#64748b;">
                 ${bus.offline ? (locale === "ru" ? "Оффлайн" : "Оффлайн") : locale === "ru" ? "На линии" : "Желіде"}
               </div>
@@ -394,9 +406,14 @@ export default function OutdoorMap({
 
       overlayPoints.push([transitOverlay.target.lat, transitOverlay.target.lng]);
 
-      if (!cancelled && overlayPoints.length > 1) {
+      if (
+        !cancelled &&
+        overlayPoints.length > 1 &&
+        lastTransitViewportKeyRef.current !== transitViewportKey
+      ) {
         const bounds = leaflet.latLngBounds(overlayPoints);
         map.fitBounds(bounds, { padding: [72, 72], maxZoom: 16 });
+        lastTransitViewportKeyRef.current = transitViewportKey;
       }
     }
 
