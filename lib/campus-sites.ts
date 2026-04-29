@@ -101,6 +101,13 @@ export const CAMPUS_SITES: CampusSite[] = [
         },
         url: "https://zhetysu.edu.kz/gallery-2-korpus-ru/",
       },
+      {
+        label: {
+          ru: "360",
+          kk: "360",
+        },
+        url: "https://kuula.co/post/n1/collection/7MD9K",
+      },
     ],
   },
   {
