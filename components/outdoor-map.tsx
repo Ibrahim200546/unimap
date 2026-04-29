@@ -68,12 +68,16 @@ export default function OutdoorMap({
         center,
         zoom: 14,
         zoomControl: true,
-        attributionControl: false,
+        attributionControl: true,
       });
 
       const tileConfig = getTileLayerConfig(mapStyle);
       tileLayerRef.current = leaflet
-        .tileLayer(tileConfig.url, { maxZoom: tileConfig.maxZoom, subdomains: tileConfig.subdomains })
+        .tileLayer(tileConfig.url, {
+          attribution: tileConfig.attribution,
+          maxZoom: tileConfig.maxZoom,
+          subdomains: tileConfig.subdomains,
+        })
         .addTo(map);
       mapRef.current = map;
     }
@@ -100,7 +104,11 @@ export default function OutdoorMap({
 
       const tileConfig = getTileLayerConfig(mapStyle);
       tileLayerRef.current = leaflet
-        .tileLayer(tileConfig.url, { maxZoom: tileConfig.maxZoom, subdomains: tileConfig.subdomains })
+        .tileLayer(tileConfig.url, {
+          attribution: tileConfig.attribution,
+          maxZoom: tileConfig.maxZoom,
+          subdomains: tileConfig.subdomains,
+        })
         .addTo(mapRef.current);
     }
 
@@ -498,26 +506,32 @@ function getSiteColor(kind: CampusSite["kind"]) {
 }
 
 function getTileLayerConfig(mapStyle: ResolvedOutdoorMapStyle) {
+  const openStreetMapAttribution =
+    '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors';
+
   if (mapStyle === "dark") {
     return {
-      url: "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",
+      url: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+      attribution: openStreetMapAttribution,
       maxZoom: 19,
-      subdomains: "abcd",
+      subdomains: "abc",
     };
   }
 
   if (mapStyle === "relief") {
     return {
       url: "https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png",
+      attribution: `${openStreetMapAttribution}, SRTM | &copy; <a href="https://opentopomap.org">OpenTopoMap</a>`,
       maxZoom: 17,
       subdomains: ["a", "b", "c"],
     };
   }
 
   return {
-    url: "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png",
+    url: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+    attribution: openStreetMapAttribution,
     maxZoom: 19,
-    subdomains: "abcd",
+    subdomains: "abc",
   };
 }
 
