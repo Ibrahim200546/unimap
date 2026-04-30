@@ -133,7 +133,7 @@ body::-webkit-scrollbar-track,
 }
 
 .leaflet-filtered-dark-map .leaflet-tile-pane {
-  filter: brightness(0.62) contrast(1.18) saturate(0.78) hue-rotate(180deg);
+  filter: invert(1) hue-rotate(180deg) brightness(0.82) contrast(1.24) saturate(0.75);
 }
 
 .dark .leaflet-popup-content-wrapper,

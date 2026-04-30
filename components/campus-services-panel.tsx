@@ -12,6 +12,7 @@ import {
   Soup,
 } from "lucide-react";
 
+import { useAuth } from "@/components/auth-gate";
 import CampusTransitPanel from "@/components/campus-transit-panel";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -29,6 +30,7 @@ import { getRoomById, getRoomDisplayName } from "@/lib/building-data";
 import type { CampusSite } from "@/lib/campus-sites";
 import type { Locale } from "@/lib/i18n";
 import { text } from "@/lib/i18n";
+import { createFeedbackRequest } from "@/lib/supabase-auth";
 
 interface CampusServicesPanelProps {
   locale: Locale;
@@ -179,7 +181,16 @@ export default function CampusServicesPanel({
   onSelectOutdoorSite,
   onTransitOverlayChange,
 }: CampusServicesPanelProps) {
+  const auth = useAuth();
   const copy = SERVICES_COPY[locale];
+  const feedbackSendingText =
+    locale === "en" ? "Sending..." : locale === "kk" ? "Жіберілуде..." : "Отправляем...";
+  const feedbackErrorText =
+    locale === "en"
+      ? "Unable to send the request. Try again."
+      : locale === "kk"
+      ? "Өтініш жіберілмеді. Қайталап көріңіз."
+      : "Не удалось отправить обращение. Попробуйте ещё раз.";
   const transportLabel =
     locale === "ru" ? "Транспорт" : locale === "kk" ? "Көлік" : "Transport";
   const transportHeading =
@@ -195,6 +206,8 @@ export default function CampusServicesPanel({
     message: "",
   });
   const [feedbackSent, setFeedbackSent] = useState(false);
+  const [feedbackSending, setFeedbackSending] = useState(false);
+  const [feedbackError, setFeedbackError] = useState<string | null>(null);
 
   const tabs = useMemo(
     () => [
@@ -215,11 +228,30 @@ export default function CampusServicesPanel({
     );
   };
 
-  const handleFeedbackSubmit = () => {
-    if (!feedbackForm.topic.trim() || !feedbackForm.message.trim()) return;
+  const handleFeedbackSubmit = async () => {
+    const topic = feedbackForm.topic.trim();
+    const message = feedbackForm.message.trim();
+    if (!topic || !message || feedbackSending) return;
 
-    setFeedbackSent(true);
-    setFeedbackForm({ topic: "", message: "" });
+    setFeedbackSending(true);
+    setFeedbackError(null);
+
+    try {
+      await createFeedbackRequest({
+        accessToken: auth.session.access_token,
+        userId: auth.session.user.id,
+        topic,
+        message,
+        locale,
+      });
+      setFeedbackSent(true);
+      setFeedbackForm({ topic: "", message: "" });
+    } catch {
+      setFeedbackSent(false);
+      setFeedbackError(feedbackErrorText);
+    } finally {
+      setFeedbackSending(false);
+    }
   };
 
   const renderContent = () => {
@@ -488,26 +520,38 @@ export default function CampusServicesPanel({
             <Input
               placeholder={copy.topicPlaceholder}
               value={feedbackForm.topic}
-              onChange={(event) =>
+              onChange={(event) => {
+                setFeedbackSent(false);
+                setFeedbackError(null);
                 setFeedbackForm((current) => ({
                   ...current,
                   topic: event.target.value,
-                }))
-              }
+                }));
+              }}
             />
             <Textarea
               placeholder={copy.messagePlaceholder}
               value={feedbackForm.message}
-              onChange={(event) =>
+              onChange={(event) => {
+                setFeedbackSent(false);
+                setFeedbackError(null);
                 setFeedbackForm((current) => ({
                   ...current,
                   message: event.target.value,
-                }))
-              }
+                }));
+              }}
             />
             <div className="flex items-center justify-between gap-3">
-              <Button onClick={handleFeedbackSubmit} type="button">
-                {copy.send}
+              <Button
+                onClick={handleFeedbackSubmit}
+                type="button"
+                disabled={
+                  feedbackSending ||
+                  !feedbackForm.topic.trim() ||
+                  !feedbackForm.message.trim()
+                }
+              >
+                {feedbackSending ? feedbackSendingText : copy.send}
               </Button>
               {feedbackSent ? (
                 <span className="inline-flex items-center gap-2 text-xs text-accent">
@@ -520,6 +564,9 @@ export default function CampusServicesPanel({
                 </span>
               )}
             </div>
+            {feedbackError ? (
+              <p className="text-xs text-destructive">{feedbackError}</p>
+            ) : null}
           </div>
         </div>
       </div>

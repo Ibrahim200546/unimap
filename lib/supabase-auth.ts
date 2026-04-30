@@ -24,6 +24,25 @@ export interface SupabaseSession {
   user: SupabaseUser;
 }
 
+export interface FeedbackRequestPayload {
+  accessToken: string;
+  userId: string;
+  topic: string;
+  message: string;
+  locale: "ru" | "kk" | "en";
+}
+
+export interface FeedbackRequestRecord {
+  id: string;
+  user_id: string;
+  topic: string;
+  message: string;
+  locale: "ru" | "kk" | "en";
+  status: string;
+  created_at: string;
+  updated_at: string;
+}
+
 function getAuthHeaders(token?: string) {
   return {
     apikey: SUPABASE_PUBLISHABLE_KEY,
@@ -146,4 +165,29 @@ export async function getCurrentUser(accessToken: string) {
   });
 
   return readAuthResponse<SupabaseUser>(response);
+}
+
+export async function createFeedbackRequest({
+  accessToken,
+  userId,
+  topic,
+  message,
+  locale,
+}: FeedbackRequestPayload) {
+  const response = await fetch(`${SUPABASE_URL}/rest/v1/feedback_requests`, {
+    method: "POST",
+    headers: {
+      ...getAuthHeaders(accessToken),
+      Prefer: "return=representation",
+    },
+    body: JSON.stringify({
+      user_id: userId,
+      topic,
+      message,
+      locale,
+    }),
+  });
+
+  const rows = await readAuthResponse<FeedbackRequestRecord[]>(response);
+  return rows[0] ?? null;
 }

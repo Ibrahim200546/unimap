@@ -48,6 +48,7 @@ export default function OutdoorMap({
   const routeLineRef = useRef<any>(null);
   const transitLayerRef = useRef<any>(null);
   const tileLayerRef = useRef<any>(null);
+  const tileLayerKeyRef = useRef<string | null>(null);
   const siteLayerRef = useRef<any>(null);
   const siteMarkersRef = useRef<Map<string, any>>(new Map());
   const routeCacheRef = useRef<Map<string, [number, number][]>>(new Map());
@@ -82,13 +83,8 @@ export default function OutdoorMap({
       });
 
       const tileConfig = getTileLayerConfig(mapStyle, globalMapProvider);
-      tileLayerRef.current = leaflet
-        .tileLayer(tileConfig.url, {
-          attribution: tileConfig.attribution,
-          maxZoom: tileConfig.maxZoom,
-          subdomains: tileConfig.subdomains,
-        })
-        .addTo(map);
+      tileLayerRef.current = createLeafletTileLayer(leaflet, tileConfig).addTo(map);
+      tileLayerKeyRef.current = getTileLayerKey(mapStyle, globalMapProvider);
       mapRef.current = map;
       setMapReadyKey((value) => value + 1);
     }
@@ -102,6 +98,7 @@ export default function OutdoorMap({
         mapRef.current = null;
       }
       tileLayerRef.current = null;
+      tileLayerKeyRef.current = null;
       siteLayerRef.current = null;
       siteMarkersRef.current = new Map();
       userMarkerRef.current = null;
@@ -114,25 +111,59 @@ export default function OutdoorMap({
   }, [globalMapProvider, sites]);
 
   useEffect(() => {
-    async function updateTileTheme() {
-      if (!mapRef.current) return;
+    let cancelled = false;
+    let pendingLayer: any = null;
+
+    async function syncTileLayer() {
+      const map = mapRef.current;
+      if (!map || !tileLayerRef.current) return;
+
+      const nextKey = getTileLayerKey(mapStyle, globalMapProvider);
+      if (tileLayerKeyRef.current === nextKey) return;
+
       const leaflet = await import("leaflet");
 
-      if (tileLayerRef.current) {
-        mapRef.current.removeLayer(tileLayerRef.current);
-      }
+      if (cancelled || !mapRef.current || mapRef.current !== map) return;
 
+      const previousLayer = tileLayerRef.current;
       const tileConfig = getTileLayerConfig(mapStyle, globalMapProvider);
-      tileLayerRef.current = leaflet
-        .tileLayer(tileConfig.url, {
-          attribution: tileConfig.attribution,
-          maxZoom: tileConfig.maxZoom,
-          subdomains: tileConfig.subdomains,
-        })
-        .addTo(mapRef.current);
+      pendingLayer = createLeafletTileLayer(leaflet, tileConfig, 0).addTo(map);
+
+      let settled = false;
+      const finishSwap = () => {
+        if (cancelled || settled || !mapRef.current || mapRef.current !== map) return;
+
+        settled = true;
+        pendingLayer.setOpacity(1);
+
+        if (
+          previousLayer &&
+          previousLayer !== pendingLayer &&
+          map.hasLayer(previousLayer)
+        ) {
+          map.removeLayer(previousLayer);
+        }
+
+        tileLayerRef.current = pendingLayer;
+        tileLayerKeyRef.current = nextKey;
+        map.invalidateSize();
+      };
+
+      pendingLayer.once("load", finishSwap);
     }
 
-    updateTileTheme();
+    syncTileLayer();
+
+    return () => {
+      cancelled = true;
+      if (
+        pendingLayer &&
+        tileLayerRef.current !== pendingLayer &&
+        mapRef.current?.hasLayer(pendingLayer)
+      ) {
+        mapRef.current.removeLayer(pendingLayer);
+      }
+    };
   }, [globalMapProvider, mapReadyKey, mapStyle]);
 
   useEffect(() => {
@@ -596,6 +627,26 @@ function getTileLayerConfig(
     maxZoom: 19,
     subdomains: "abc",
   };
+}
+
+function getTileLayerKey(
+  mapStyle: ResolvedOutdoorMapStyle,
+  globalMapProvider: GlobalMapProvider
+) {
+  return `${globalMapProvider}:${mapStyle}:${getTileLayerConfig(mapStyle, globalMapProvider).url}`;
+}
+
+function createLeafletTileLayer(
+  leaflet: any,
+  tileConfig: ReturnType<typeof getTileLayerConfig>,
+  opacity = 1
+) {
+  return leaflet.tileLayer(tileConfig.url, {
+    attribution: tileConfig.attribution,
+    maxZoom: tileConfig.maxZoom,
+    opacity,
+    subdomains: tileConfig.subdomains,
+  });
 }
 
 function escapeHtml(value: string) {
