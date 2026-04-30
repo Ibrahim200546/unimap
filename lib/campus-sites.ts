@@ -220,8 +220,8 @@ export const CAMPUS_SITES: CampusSite[] = [
       kk: "Жетісу университетінің №2 студенттік жатақханасы.",
       en: "Zhetysu University student dormitory No. 2.",
     },
-    lat: 45.003939,
-    lng: 78.363339,
+    lat: 45.003736,
+    lng: 78.361754,
     photoLinks: [
       {
         label: {
@@ -229,7 +229,7 @@ export const CAMPUS_SITES: CampusSite[] = [
           kk: "Галерея",
           en: "Gallery",
         },
-        url: "https://yandex.kz/maps/?ll=78.363339%2C45.003939&z=18&mode=search&text=%D0%9E%D0%B1%D1%89%D0%B5%D0%B6%D0%B8%D1%82%D0%B8%D0%B5%202",
+        url: "https://yandex.kz/maps/?ll=78.361754%2C45.003736&z=18&mode=search&text=%D0%9E%D0%B1%D1%89%D0%B5%D0%B6%D0%B8%D1%82%D0%B8%D0%B5%202",
       },
     ],
   },

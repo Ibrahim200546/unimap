@@ -52,6 +52,7 @@ export default function OutdoorMap({
   const siteMarkersRef = useRef<Map<string, any>>(new Map());
   const routeCacheRef = useRef<Map<string, [number, number][]>>(new Map());
   const lastTransitViewportKeyRef = useRef<string | null>(null);
+  const hasFitInitialBoundsRef = useRef(false);
   const [mapReadyKey, setMapReadyKey] = useState(0);
 
   useEffect(() => {
@@ -108,6 +109,7 @@ export default function OutdoorMap({
       routeLineRef.current = null;
       transitLayerRef.current = null;
       lastTransitViewportKeyRef.current = null;
+      hasFitInitialBoundsRef.current = false;
     };
   }, [globalMapProvider, sites]);
 
@@ -166,9 +168,17 @@ export default function OutdoorMap({
       siteLayerRef.current = layer;
       siteMarkersRef.current = markers;
 
-      if (points.length > 0 && userLat === null && userLng === null) {
+      markers.get(selectedSiteId)?.openPopup();
+
+      if (
+        points.length > 0 &&
+        userLat === null &&
+        userLng === null &&
+        !hasFitInitialBoundsRef.current
+      ) {
         const bounds = leaflet.latLngBounds(points);
         map.fitBounds(bounds, { padding: [72, 72] });
+        hasFitInitialBoundsRef.current = true;
       }
     }
 
