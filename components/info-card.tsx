@@ -74,6 +74,16 @@ const INFO_COPY = {
     closeRoute: "Маршрутты жабу",
     closeRoom: "Бөлме картасын жабу",
   },
+  en: {
+    nearbyText: "Campus is nearby. Open the building map and continue indoor navigation.",
+    openIndoor: "Open building map",
+    routeSteps: "Route steps",
+    accessible: "Accessible",
+    makeStart: "Set as start",
+    routeHere: "Route here",
+    closeRoute: "Close route",
+    closeRoom: "Close room card",
+  },
 } as const;
 
 export default function InfoCard(props: InfoCardProps) {

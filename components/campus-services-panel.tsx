@@ -130,6 +130,43 @@ const SERVICES_COPY = {
       feedback: "Кері байланыс",
     },
   },
+  en: {
+    title: "Campus services",
+    subtitle: "Open only the service you need and build a route to its point in one click.",
+    route: "Route",
+    find: "Find",
+    reserve: "Reserve",
+    reserved: "Reserved",
+    done: "Done",
+    available: "Available",
+    busy: "Busy",
+    important: "Important",
+    fresh: "New",
+    update: "Update",
+    take: "Ready to pick up",
+    processing: "Processing",
+    send: "Send request",
+    accepted: "Accepted by service center",
+    responseHint: "The response will arrive in the app and by email.",
+    topicPlaceholder: "Request topic",
+    messagePlaceholder: "Describe the issue, question, or suggestion",
+    tabs: {
+      schedule: "Schedule",
+      news: "News",
+      dining: "Dining",
+      booking: "Booking",
+      lost: "Lost & Found",
+      feedback: "Requests",
+    },
+    headings: {
+      schedule: "Upcoming classes",
+      news: "News and announcements",
+      dining: "Cafeteria menu",
+      booking: "Room booking",
+      lost: "Lost & Found",
+      feedback: "Feedback",
+    },
+  },
 } as const;
 
 export default function CampusServicesPanel({
@@ -143,9 +180,14 @@ export default function CampusServicesPanel({
   onTransitOverlayChange,
 }: CampusServicesPanelProps) {
   const copy = SERVICES_COPY[locale];
-  const transportLabel = locale === "ru" ? "Транспорт" : "Көлік";
+  const transportLabel =
+    locale === "ru" ? "Транспорт" : locale === "kk" ? "Көлік" : "Transport";
   const transportHeading =
-    locale === "ru" ? "Межкорпусной транспорт" : "Корпус аралық көлік";
+    locale === "ru"
+      ? "Межкорпусной транспорт"
+      : locale === "kk"
+      ? "Корпус аралық көлік"
+      : "Transport between buildings";
   const [activeView, setActiveView] = useState<ServiceView>("schedule");
   const [reservedSlots, setReservedSlots] = useState<string[]>([]);
   const [feedbackForm, setFeedbackForm] = useState<FeedbackFormState>({

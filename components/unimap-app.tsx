@@ -13,6 +13,7 @@ import {
   ExternalLink,
   Globe2,
   LocateFixed,
+  LogOut,
   Map,
   Moon,
   PanelsTopLeft,
@@ -20,9 +21,11 @@ import {
   Settings2,
   Sparkles,
   SunMedium,
+  UserRound,
 } from "lucide-react";
 import { useTheme } from "next-themes";
 
+import { useAuth } from "@/components/auth-gate";
 import CampusServicesPanel from "@/components/campus-services-panel";
 import FloorSelector from "@/components/floor-selector";
 import IndoorMap from "@/components/indoor-map";
@@ -34,11 +37,13 @@ import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import {
   EXTERNAL_MAP_SERVICE_OPTIONS,
+  GLOBAL_MAP_PROVIDER_OPTIONS,
   OUTDOOR_MAP_STYLE_OPTIONS,
   getExternalMapServiceLabel,
   getExternalMapUrl,
   getOpenInLabel,
   type ExternalMapService,
+  type GlobalMapProvider,
   type OutdoorMapStyle,
 } from "@/lib/campus-map-utils";
 import {
@@ -56,7 +61,7 @@ import { NAVIGATION_COLLECTIONS } from "@/lib/campus-data";
 import { CAMPUS_SITES, getCampusSiteById, type CampusSite } from "@/lib/campus-sites";
 import type { CampusTransitMapOverlay } from "@/lib/campus-transit";
 import { estimateOutdoorWalkingTime, haversineDistance } from "@/lib/geo-utils";
-import { text, type Locale } from "@/lib/i18n";
+import { getDateTimeLocale, text, type Locale } from "@/lib/i18n";
 import { buildRoute, estimateWalkingTime, pixelsToMeters } from "@/lib/pathfinding";
 import { APP_COPY } from "@/lib/unimap-copy";
 import { cn } from "@/lib/utils";
@@ -123,6 +128,23 @@ const OUTDOOR_COPY = {
     resizeSidebar: "Бүйір панель енін өзгерту",
     activeSite: "Ағымдағы нүкте",
   },
+  en: {
+    universityTitle: "Zhetysu University",
+    universitySubtitle: "Navigation across campus buildings and city points",
+    sitesTitle: "Campus places",
+    sitesText:
+      "Choose a building, library, or lecture hall. All campus points stay visible on the map together.",
+    openIndoor: "Open floors",
+    openPhotos: "Open photos",
+    sourceLinks: "Photos and galleries",
+    indoorReady: "Indoor map available",
+    outdoorOnly: "Outdoor point only for now",
+    selected: "Selected on map",
+    coordinates: "Coordinates",
+    campusCount: "Campus points",
+    resizeSidebar: "Resize sidebar",
+    activeSite: "Current point",
+  },
 } as const;
 
 const SETTINGS_COPY = {
@@ -134,6 +156,8 @@ const SETTINGS_COPY = {
     serviceTitle: "Открывать карту в сервисе",
     serviceText: "Кнопка «Открыть в...» использует выбранный внешний картографический сервис.",
     serviceHint: "Google Maps, 2GIS и Yandex Maps открываются в новой вкладке.",
+    globalMapTitle: "Глобальная карта",
+    globalMapText: "Выберите провайдера подложки для основной карты кампуса.",
     geoTitle: "Текущее местоположение",
     geoText: "Позиция обновляется через watchPosition с высокой точностью. Итоговая точность зависит от GPS, браузера и сигнала устройства.",
     geoLive: "Реалтайм включён",
@@ -141,6 +165,9 @@ const SETTINGS_COPY = {
     geoAccuracy: "Точность",
     geoUpdated: "Последнее обновление",
     geoUnavailable: "Нет данных",
+    accountTitle: "Аккаунт",
+    accountText: "Вы вошли через Supabase.",
+    signOut: "Выйти",
     active: "Выбрано",
   },
   kk: {
@@ -151,6 +178,8 @@ const SETTINGS_COPY = {
     serviceTitle: "Картаны қай сервисте ашу",
     serviceText: "«Открыть в...» батырмасы таңдалған сыртқы карта сервисін қолданады.",
     serviceHint: "Google Maps, 2GIS және Yandex Maps жаңа бетте ашылады.",
+    globalMapTitle: "Глобал карта",
+    globalMapText: "Кампустың негізгі картасы үшін карта қабатының провайдерін таңдаңыз.",
     geoTitle: "Ағымдағы орналасу",
     geoText: "Позиция watchPosition арқылы жоғары дәлдікпен жаңарады. Соңғы дәлдік GPS, браузер және құрылғы сигналына тәуелді.",
     geoLive: "Реалтайм қосулы",
@@ -158,7 +187,32 @@ const SETTINGS_COPY = {
     geoAccuracy: "Дәлдік",
     geoUpdated: "Соңғы жаңарту",
     geoUnavailable: "Дерек жоқ",
+    accountTitle: "Аккаунт",
+    accountText: "Supabase арқылы кірдіңіз.",
+    signOut: "Шығу",
     active: "Таңдалды",
+  },
+  en: {
+    title: "Map settings",
+    description: "Configure the campus map layer, external service, and live student geolocation.",
+    mapStyleTitle: "Map type",
+    mapStyleText: "Switch the base layer between auto, light, dark, and relief modes.",
+    serviceTitle: "Open map in service",
+    serviceText: "The “Open in...” button uses the selected external map service.",
+    serviceHint: "Google Maps, 2GIS, and Yandex Maps open in a new tab.",
+    globalMapTitle: "Global map",
+    globalMapText: "Choose the tile provider for the main campus map.",
+    geoTitle: "Current location",
+    geoText: "The position updates through high-accuracy watchPosition. Final accuracy depends on GPS, browser, and device signal.",
+    geoLive: "Realtime enabled",
+    geoWaiting: "Waiting for signal",
+    geoAccuracy: "Accuracy",
+    geoUpdated: "Last update",
+    geoUnavailable: "No data",
+    accountTitle: "Account",
+    accountText: "Signed in with Supabase.",
+    signOut: "Sign out",
+    active: "Selected",
   },
 } as const;
 
@@ -175,21 +229,35 @@ function formatDistanceLocalized(meters: number) {
 }
 
 function formatTimeLocalized(minutes: number, locale: Locale) {
-  if (minutes < 1) return locale === "ru" ? "< 1 мин" : "< 1 мин";
-  if (minutes < 60) return `${Math.round(minutes)} мин`;
+  if (minutes < 1) return locale === "en" ? "< 1 min" : "< 1 мин";
+  if (minutes < 60) {
+    return locale === "en"
+      ? `${Math.round(minutes)} min`
+      : `${Math.round(minutes)} мин`;
+  }
   const hours = Math.floor(minutes / 60);
   const rest = Math.round(minutes % 60);
-  return locale === "ru" ? `${hours} ч ${rest} мин` : `${hours} сағ ${rest} мин`;
+  if (locale === "kk") return `${hours} сағ ${rest} мин`;
+  if (locale === "en") return `${hours} h ${rest} min`;
+  return `${hours} ч ${rest} мин`;
 }
 
 function formatGeoAccuracyLocalized(value: number | null, locale: Locale) {
-  if (value === null) return locale === "ru" ? "Нет данных" : "Дерек жоқ";
-  return locale === "ru" ? `≈ ${Math.round(value)} м` : `≈ ${Math.round(value)} м`;
+  if (value === null) {
+    if (locale === "kk") return "Дерек жоқ";
+    if (locale === "en") return "No data";
+    return "Нет данных";
+  }
+  return locale === "en" ? `≈ ${Math.round(value)} m` : `≈ ${Math.round(value)} м`;
 }
 
 function formatGeoUpdatedAt(value: number | null, locale: Locale) {
-  if (value === null) return locale === "ru" ? "Нет данных" : "Дерек жоқ";
-  return new Intl.DateTimeFormat(locale === "ru" ? "ru-RU" : "kk-KZ", {
+  if (value === null) {
+    if (locale === "kk") return "Дерек жоқ";
+    if (locale === "en") return "No data";
+    return "Нет данных";
+  }
+  return new Intl.DateTimeFormat(getDateTimeLocale(locale), {
     hour: "2-digit",
     minute: "2-digit",
     second: "2-digit",
@@ -245,7 +313,9 @@ function createRoutePlan(args: {
       steps:
         locale === "ru"
           ? [`Старт: ${start.label}.`, `Следуйте по ${getFloorLabel(start.floor, locale).toLowerCase()} к "${destinationName}".`, `Финиш: ${destination.label}.`]
-          : [`Бастау: ${start.label}.`, `${getFloorLabel(start.floor, locale)} бойымен "${destinationName}" нүктесіне өтіңіз.`, `Мәре: ${destination.label}.`],
+          : locale === "kk"
+          ? [`Бастау: ${start.label}.`, `${getFloorLabel(start.floor, locale)} бойымен "${destinationName}" нүктесіне өтіңіз.`, `Мәре: ${destination.label}.`]
+          : [`Start: ${start.label}.`, `Follow ${getFloorLabel(start.floor, locale).toLowerCase()} to "${destinationName}".`, `Finish: ${destination.label}.`],
     };
   }
 
@@ -267,14 +337,20 @@ function createRoutePlan(args: {
     profile === "accessible"
       ? locale === "ru"
         ? "на лифте"
-        : "лифтпен"
+        : locale === "kk"
+        ? "лифтпен"
+        : "by elevator"
       : fromConnector.type === "stairs"
       ? locale === "ru"
         ? "по лестнице"
-        : "баспалдақпен"
+        : locale === "kk"
+        ? "баспалдақпен"
+        : "by stairs"
       : locale === "ru"
       ? "на лифте"
-      : "лифтпен";
+      : locale === "kk"
+      ? "лифтпен"
+      : "by elevator";
 
   return {
     destination,
@@ -295,16 +371,24 @@ function createRoutePlan(args: {
             `Поднимитесь на ${getFloorLabel(destination.floor, locale).toLowerCase()} ${connectorWay}.`,
             `Продолжайте до "${destinationName}".`,
           ]
-        : [
+        : locale === "kk"
+        ? [
             `Бастау: ${start.label}.`,
             `"${getRoomDisplayName(fromConnector, locale)}" нүктесіне барыңыз.`,
             `${getFloorLabel(destination.floor, locale)} ${connectorWay} көтеріліңіз.`,
             `"${destinationName}" нүктесіне дейін жалғастырыңыз.`,
+          ]
+        : [
+            `Start: ${start.label}.`,
+            `Go to "${getRoomDisplayName(fromConnector, locale)}".`,
+            `Move to ${getFloorLabel(destination.floor, locale).toLowerCase()} ${connectorWay}.`,
+            `Continue to "${destinationName}".`,
           ],
   };
 }
 
 export default function UniMapApp() {
+  const auth = useAuth();
   const { resolvedTheme, setTheme } = useTheme();
   const gridRef = useRef<HTMLDivElement>(null);
   const mobileSheetContentRef = useRef<HTMLDivElement>(null);
@@ -334,6 +418,8 @@ export default function UniMapApp() {
   const [geoError, setGeoError] = useState<string | null>(null);
   const [mapStyle, setMapStyle] = useState<OutdoorMapStyle>("auto");
   const [externalMapService, setExternalMapService] = useState<ExternalMapService>("yandex");
+  const [globalMapProvider, setGlobalMapProvider] = useState<GlobalMapProvider>("osm");
+  const [preferencesReady, setPreferencesReady] = useState(false);
   const [sidebarWidth, setSidebarWidth] = useState(390);
   const [isDesktop, setIsDesktop] = useState(false);
   const [isResizing, setIsResizing] = useState(false);
@@ -346,10 +432,15 @@ export default function UniMapApp() {
   const settingsCopy = SETTINGS_COPY[locale];
   const panelLabels = {
     ...copy.panels,
-    schedule: locale === "ru" ? "Расписание" : "Кесте",
+    schedule:
+      locale === "ru" ? "Расписание" : locale === "kk" ? "Кесте" : "Schedule",
   };
   const activeTheme = resolvedTheme === "dark" ? "dark" : "light";
-  const panelLabelsWithSettings = { ...panelLabels, settings: locale === "ru" ? "Настройки" : "Баптаулар" };
+  const panelLabelsWithSettings = {
+    ...panelLabels,
+    settings:
+      locale === "ru" ? "Настройки" : locale === "kk" ? "Баптаулар" : "Settings",
+  };
   const effectiveOutdoorMapStyle = mapStyle === "auto" ? activeTheme : mapStyle;
   const isIndoor = mode !== "outdoor";
   const floorData = getFloorById(currentFloor);
@@ -369,6 +460,11 @@ export default function UniMapApp() {
   const activeOutdoorSite = getCampusSiteById(activeOutdoorSiteId) ?? CAMPUS_SITES[0];
   const activeOutdoorMapUrl = getExternalMapUrl(activeOutdoorSite, externalMapService, locale);
   const activeExternalMapLabel = getExternalMapServiceLabel(externalMapService, locale);
+  const activeGlobalMapProviderLabel = text(
+    GLOBAL_MAP_PROVIDER_OPTIONS.find((option) => option.id === globalMapProvider)?.label ??
+      GLOBAL_MAP_PROVIDER_OPTIONS[0].label,
+    locale
+  );
   const distanceToActiveSite =
     userLat !== null && userLng !== null && activeOutdoorSite?.lat !== undefined && activeOutdoorSite?.lng !== undefined
       ? haversineDistance(userLat, userLng, activeOutdoorSite.lat, activeOutdoorSite.lng)
@@ -415,7 +511,7 @@ export default function UniMapApp() {
 
   useEffect(() => {
     const stored = window.localStorage.getItem("smart-campus-locale");
-    if (stored === "ru" || stored === "kk") {
+    if (stored === "ru" || stored === "kk" || stored === "en") {
       setLocale(stored);
     }
 
@@ -428,19 +524,39 @@ export default function UniMapApp() {
     if (storedExternalMap === "yandex" || storedExternalMap === "2gis" || storedExternalMap === "google") {
       setExternalMapService(storedExternalMap);
     }
+
+    const storedGlobalMapProvider = window.localStorage.getItem("smart-campus-global-map-provider");
+    if (
+      storedGlobalMapProvider === "osm" ||
+      storedGlobalMapProvider === "google" ||
+      storedGlobalMapProvider === "2gis" ||
+      storedGlobalMapProvider === "yandex"
+    ) {
+      setGlobalMapProvider(storedGlobalMapProvider);
+    }
+
+    setPreferencesReady(true);
   }, []);
 
   useEffect(() => {
+    if (!preferencesReady) return;
     window.localStorage.setItem("smart-campus-locale", locale);
-  }, [locale]);
+  }, [locale, preferencesReady]);
 
   useEffect(() => {
+    if (!preferencesReady) return;
     window.localStorage.setItem("smart-campus-map-style", mapStyle);
-  }, [mapStyle]);
+  }, [mapStyle, preferencesReady]);
 
   useEffect(() => {
+    if (!preferencesReady) return;
     window.localStorage.setItem("smart-campus-external-map", externalMapService);
-  }, [externalMapService]);
+  }, [externalMapService, preferencesReady]);
+
+  useEffect(() => {
+    if (!preferencesReady) return;
+    window.localStorage.setItem("smart-campus-global-map-provider", globalMapProvider);
+  }, [globalMapProvider, preferencesReady]);
 
   useEffect(() => {
     const media = window.matchMedia("(min-width: 1024px)");
@@ -1022,6 +1138,38 @@ export default function UniMapApp() {
       </section>
 
       <section className="rounded-[28px] border border-border bg-card p-5 shadow-sm">
+        <div className="flex items-start gap-3">
+          <Globe2 className="mt-0.5 h-5 w-5 text-primary" />
+          <div className="min-w-0">
+            <h4 className="text-sm font-semibold">{settingsCopy.globalMapTitle}</h4>
+            <p className="mt-1 text-sm text-muted-foreground">{settingsCopy.globalMapText}</p>
+          </div>
+        </div>
+
+        <div className="mt-4 grid gap-2">
+          {GLOBAL_MAP_PROVIDER_OPTIONS.map((option) => (
+            <button
+              key={option.id}
+              type="button"
+              onClick={() => setGlobalMapProvider(option.id)}
+              className={cn(
+                "rounded-2xl border px-4 py-3 text-left transition-colors",
+                globalMapProvider === option.id ? "border-primary bg-primary/10" : "border-border hover:bg-muted"
+              )}
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold">{text(option.label, locale)}</p>
+                  <p className="mt-1 text-xs text-muted-foreground">{text(option.description, locale)}</p>
+                </div>
+                {globalMapProvider === option.id ? <Badge variant="secondary">{settingsCopy.active}</Badge> : null}
+              </div>
+            </button>
+          ))}
+        </div>
+      </section>
+
+      <section className="rounded-[28px] border border-border bg-card p-5 shadow-sm">
         <div className="flex items-start justify-between gap-4">
           <div className="flex min-w-0 items-start gap-3">
             <LocateFixed className="mt-0.5 h-5 w-5 text-primary" />
@@ -1035,7 +1183,7 @@ export default function UniMapApp() {
           </Badge>
         </div>
 
-        <div className="mt-4 grid gap-3 sm:grid-cols-2">
+        <div className="mt-4 grid gap-3">
           <div className="rounded-2xl bg-muted/70 p-4">
             <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">{settingsCopy.geoAccuracy}</p>
             <p className="mt-2 text-sm font-medium">{formatGeoAccuracyLocalized(userAccuracy, locale)}</p>
@@ -1051,7 +1199,31 @@ export default function UniMapApp() {
           <p className="mt-2 text-sm font-medium">{activeExternalMapLabel}</p>
         </div>
 
+        <div className="mt-3 rounded-2xl border border-border px-4 py-3">
+          <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">{settingsCopy.globalMapTitle}</p>
+          <p className="mt-2 text-sm font-medium">{activeGlobalMapProviderLabel}</p>
+        </div>
+
         {geoError ? <p className="mt-4 text-sm font-medium text-destructive">{geoError}</p> : null}
+      </section>
+
+      <section className="rounded-[28px] border border-border bg-card p-5 shadow-sm">
+        <div className="flex items-start gap-3">
+          <UserRound className="mt-0.5 h-5 w-5 text-primary" />
+          <div className="min-w-0 flex-1">
+            <h4 className="text-sm font-semibold">{settingsCopy.accountTitle}</h4>
+            <p className="mt-1 text-sm text-muted-foreground">{settingsCopy.accountText}</p>
+            <p className="mt-2 truncate text-sm font-medium">{auth.userEmail}</p>
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={auth.signOut}
+          className="mt-4 inline-flex items-center gap-2 rounded-2xl border border-border px-4 py-3 text-sm font-medium transition-colors hover:bg-muted"
+        >
+          <LogOut className="h-4 w-4" />
+          {settingsCopy.signOut}
+        </button>
       </section>
     </div>
   );
@@ -1242,13 +1414,13 @@ export default function UniMapApp() {
           {text(UNIVERSITY.address, locale)}
         </p>
 
-        <div className="mt-4 grid gap-3 sm:grid-cols-2">
+        <div className="mt-4 grid gap-3">
           <div>
             <p className="mb-2 text-xs uppercase tracking-[0.18em] text-muted-foreground">
               {copy.language}
             </p>
             <div className="flex rounded-2xl border border-border bg-background p-1">
-              {(["ru", "kk"] as Locale[]).map((value) => (
+              {(["ru", "kk", "en"] as Locale[]).map((value) => (
                 <button
                   key={value}
                   type="button"
@@ -1261,7 +1433,11 @@ export default function UniMapApp() {
                   )}
                 >
                   <Globe2 className="mr-2 inline h-4 w-4" />
-                  {value === "ru" ? copy.localeRu : copy.localeKk}
+                  {value === "ru"
+                    ? copy.localeRu
+                    : value === "kk"
+                    ? copy.localeKk
+                    : copy.localeEn}
                 </button>
               ))}
             </div>
@@ -1370,6 +1546,7 @@ export default function UniMapApp() {
                 userLng={userLng}
                 userAccuracy={userAccuracy}
                 externalMapService={externalMapService}
+                globalMapProvider={globalMapProvider}
                 transitOverlay={transitOverlay}
                 onSiteSelect={setActiveOutdoorSiteId}
               />
@@ -1497,11 +1674,19 @@ export default function UniMapApp() {
                       <>
                         <span className="inline-flex items-center gap-2">
                           <span className="h-1.5 w-8 rounded-full bg-[#d94c1a]" />
-                          {locale === "ru" ? "Маршрут автобуса" : "Автобус маршруты"}
+                          {locale === "ru"
+                            ? "Маршрут автобуса"
+                            : locale === "kk"
+                            ? "Автобус маршруты"
+                            : "Bus route"}
                         </span>
                         <span className="inline-flex items-center gap-2">
                           <span className="h-3 w-3 rounded-full bg-[#f59e0b]" />
-                          {locale === "ru" ? "Автобусы" : "Автобустар"}
+                          {locale === "ru"
+                            ? "Автобусы"
+                            : locale === "kk"
+                            ? "Автобустар"
+                            : "Buses"}
                         </span>
                       </>
                     ) : (
@@ -1633,12 +1818,16 @@ export default function UniMapApp() {
                     <p className="mt-1 text-sm font-semibold text-foreground">
                       {locale === "ru"
                         ? "Панель кампуса"
-                        : "Кампус панелі"}
+                        : locale === "kk"
+                        ? "Кампус панелі"
+                        : "Campus panel"}
                     </p>
                     <p className="mt-1 text-xs text-muted-foreground">
                       {locale === "ru"
                         ? "Тяните вверх или вниз, чтобы открыть карту и контент в нужной пропорции."
-                        : "Карта мен контенттің арақатынасын өзгерту үшін панельді жоғары не төмен тартыңыз."}
+                        : locale === "kk"
+                        ? "Карта мен контенттің арақатынасын өзгерту үшін панельді жоғары не төмен тартыңыз."
+                        : "Drag up or down to balance the map and content area."}
                     </p>
                   </div>
                   <Badge variant="secondary">

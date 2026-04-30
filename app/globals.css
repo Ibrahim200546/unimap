@@ -129,7 +129,26 @@ body::-webkit-scrollbar-track,
   width: 100%;
   height: 100%;
   z-index: 0;
-  background: transparent;
+  background: hsl(var(--card));
+}
+
+.leaflet-filtered-dark-map .leaflet-tile-pane {
+  filter: brightness(0.62) contrast(1.18) saturate(0.78) hue-rotate(180deg);
+}
+
+.dark .leaflet-popup-content-wrapper,
+.dark .leaflet-popup-tip {
+  background: hsl(var(--card));
+  color: hsl(var(--foreground));
+}
+
+.dark .leaflet-popup-content a {
+  color: hsl(var(--primary));
+}
+
+.dark .leaflet-control-attribution {
+  background: hsl(var(--card) / 0.86);
+  color: hsl(var(--muted-foreground));
 }
 
 .leaflet-control-zoom {

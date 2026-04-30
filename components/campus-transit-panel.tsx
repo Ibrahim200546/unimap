@@ -20,7 +20,7 @@ import type {
 } from "@/lib/campus-transit";
 import type { CampusSite } from "@/lib/campus-sites";
 import { estimateOutdoorWalkingTime, haversineDistance } from "@/lib/geo-utils";
-import type { Locale } from "@/lib/i18n";
+import { getDateTimeLocale, type Locale } from "@/lib/i18n";
 import { text } from "@/lib/i18n";
 
 interface CampusTransitPanelProps {
@@ -122,6 +122,49 @@ const TRANSIT_COPY = {
     shownOnMap: "Негізгі картада көрсетілді",
     showHint: "Батырма негізгі картада маршрут пен тірі автобустарды көрсетеді.",
   },
+  en: {
+    title: "Transport between buildings",
+    subtitle:
+      "Shows the nearest InfoBus buses for the selected campus route.",
+    from: "From",
+    to: "To",
+    currentLocation: "Current location",
+    currentLocationHint: "Use the student's precise location",
+    noGeolocation:
+      "Geolocation is not available yet. You can build a route from a selected building.",
+    loading: "Loading live routes and nearest buses...",
+    empty: "InfoBus did not return suitable buses for this pair of points right now.",
+    samePoint: "You are already near the selected building. A bus is not needed now.",
+    refresh: "Refresh",
+    nearest: "Nearest bus",
+    options: "Route options",
+    arrivesIn: "Arrives in",
+    noEta: "No ETA yet",
+    walkToStop: "To stop",
+    walkFromStop: "From stop to building",
+    transfers: "Transfers",
+    stops: "Stops",
+    routeToCampus: "Show building",
+    openInfobus: "Open in InfoBus",
+    departureStop: "Boarding",
+    arrivalStop: "Exit",
+    legs: "Route legs",
+    updated: "Updated",
+    oneTransfer: "1 transfer",
+    manyTransfers: "transfers",
+    busesNow: "Nearby buses now",
+    busCount: "online",
+    selectedRoute: "Selected route",
+    noBuses: "No online buses are visible near this route right now.",
+    distanceToStop: "To boarding",
+    speed: "Speed",
+    online: "Online",
+    offline: "Offline",
+    chooseRoute: "Click an option below to choose the route shown on the main map.",
+    showOnMap: "Show",
+    shownOnMap: "Shown on main map",
+    showHint: "The button shows the route and live buses on the main map.",
+  },
 } as const;
 
 function formatMeters(meters: number) {
@@ -133,21 +176,29 @@ function formatMeters(meters: number) {
 }
 
 function formatMinutes(minutes: number | null, locale: Locale) {
-  if (minutes === null) return locale === "ru" ? "нет данных" : "дерек жоқ";
-  if (minutes < 1) return "< 1 мин";
-  return `${Math.round(minutes)} мин`;
+  if (minutes === null) {
+    if (locale === "kk") return "дерек жоқ";
+    if (locale === "en") return "no data";
+    return "нет данных";
+  }
+  if (minutes < 1) return locale === "en" ? "< 1 min" : "< 1 мин";
+  return locale === "en"
+    ? `${Math.round(minutes)} min`
+    : `${Math.round(minutes)} мин`;
 }
 
 function formatUpdatedAt(value: string, locale: Locale) {
-  return new Intl.DateTimeFormat(locale === "ru" ? "ru-RU" : "kk-KZ", {
+  return new Intl.DateTimeFormat(getDateTimeLocale(locale), {
     hour: "2-digit",
     minute: "2-digit",
     second: "2-digit",
   }).format(new Date(value));
 }
 
-function formatSpeed(speed: number) {
-  return `${Math.max(0, Math.round(speed))} км/ч`;
+function formatSpeed(speed: number, locale: Locale) {
+  return locale === "en"
+    ? `${Math.max(0, Math.round(speed))} km/h`
+    : `${Math.max(0, Math.round(speed))} км/ч`;
 }
 
 export default function CampusTransitPanel({
@@ -574,7 +625,7 @@ export default function CampusTransitPanel({
                           <Gauge className="h-4 w-4 text-primary" />
                           <span>{copy.speed}</span>
                         </div>
-                        <p className="mt-2 font-medium">{formatSpeed(bus.speed)}</p>
+                        <p className="mt-2 font-medium">{formatSpeed(bus.speed, locale)}</p>
                       </div>
                     </div>
                   </div>

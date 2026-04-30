@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import {
   getExternalMapUrl,
   getOpenInLabel,
   type ExternalMapService,
+  type GlobalMapProvider,
   type ResolvedOutdoorMapStyle,
 } from "@/lib/campus-map-utils";
 import type { CampusSite } from "@/lib/campus-sites";
@@ -22,6 +23,7 @@ interface OutdoorMapProps {
   userLng: number | null;
   userAccuracy: number | null;
   externalMapService: ExternalMapService;
+  globalMapProvider: GlobalMapProvider;
   transitOverlay: CampusTransitMapOverlay | null;
   onSiteSelect: (siteId: string) => void;
 }
@@ -35,6 +37,7 @@ export default function OutdoorMap({
   userLng,
   userAccuracy,
   externalMapService,
+  globalMapProvider,
   transitOverlay,
   onSiteSelect,
 }: OutdoorMapProps) {
@@ -49,6 +52,7 @@ export default function OutdoorMap({
   const siteMarkersRef = useRef<Map<string, any>>(new Map());
   const routeCacheRef = useRef<Map<string, [number, number][]>>(new Map());
   const lastTransitViewportKeyRef = useRef<string | null>(null);
+  const [mapReadyKey, setMapReadyKey] = useState(0);
 
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return;
@@ -63,15 +67,20 @@ export default function OutdoorMap({
 
       const defaultSite = sites.find((site) => site.lat && site.lng) ?? sites[0];
       const center = defaultSite?.lat && defaultSite?.lng ? [defaultSite.lat, defaultSite.lng] : [45.008698, 78.349901];
+      const crs =
+        globalMapProvider === "yandex"
+          ? leaflet.CRS.EPSG3395
+          : leaflet.CRS.EPSG3857;
 
       const map = leaflet.map(containerRef.current, {
         center,
         zoom: 14,
+        crs,
         zoomControl: true,
         attributionControl: true,
       });
 
-      const tileConfig = getTileLayerConfig(mapStyle);
+      const tileConfig = getTileLayerConfig(mapStyle, globalMapProvider);
       tileLayerRef.current = leaflet
         .tileLayer(tileConfig.url, {
           attribution: tileConfig.attribution,
@@ -80,6 +89,7 @@ export default function OutdoorMap({
         })
         .addTo(map);
       mapRef.current = map;
+      setMapReadyKey((value) => value + 1);
     }
 
     init();
@@ -90,8 +100,16 @@ export default function OutdoorMap({
         mapRef.current.remove();
         mapRef.current = null;
       }
+      tileLayerRef.current = null;
+      siteLayerRef.current = null;
+      siteMarkersRef.current = new Map();
+      userMarkerRef.current = null;
+      userAccuracyRef.current = null;
+      routeLineRef.current = null;
+      transitLayerRef.current = null;
+      lastTransitViewportKeyRef.current = null;
     };
-  }, [mapStyle, sites]);
+  }, [globalMapProvider, sites]);
 
   useEffect(() => {
     async function updateTileTheme() {
@@ -102,7 +120,7 @@ export default function OutdoorMap({
         mapRef.current.removeLayer(tileLayerRef.current);
       }
 
-      const tileConfig = getTileLayerConfig(mapStyle);
+      const tileConfig = getTileLayerConfig(mapStyle, globalMapProvider);
       tileLayerRef.current = leaflet
         .tileLayer(tileConfig.url, {
           attribution: tileConfig.attribution,
@@ -113,7 +131,7 @@ export default function OutdoorMap({
     }
 
     updateTileTheme();
-  }, [mapStyle]);
+  }, [globalMapProvider, mapReadyKey, mapStyle]);
 
   useEffect(() => {
     async function updateSiteMarkers() {
@@ -155,7 +173,7 @@ export default function OutdoorMap({
     }
 
     updateSiteMarkers();
-  }, [externalMapService, locale, onSiteSelect, selectedSiteId, sites, userLat, userLng]);
+  }, [externalMapService, globalMapProvider, locale, mapReadyKey, onSiteSelect, selectedSiteId, sites, userLat, userLng]);
 
   useEffect(() => {
     async function syncSelectedSite() {
@@ -168,7 +186,7 @@ export default function OutdoorMap({
     }
 
     syncSelectedSite();
-  }, [selectedSiteId]);
+  }, [globalMapProvider, mapReadyKey, selectedSiteId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -293,7 +311,7 @@ export default function OutdoorMap({
     return () => {
       cancelled = true;
     };
-  }, [selectedSiteId, sites, transitOverlay, userAccuracy, userLat, userLng]);
+  }, [globalMapProvider, mapReadyKey, selectedSiteId, sites, transitOverlay, userAccuracy, userLat, userLng]);
 
   useEffect(() => {
     let cancelled = false;
@@ -348,7 +366,7 @@ export default function OutdoorMap({
           fillOpacity: 1,
         })
         .addTo(layer)
-        .bindTooltip(locale === "ru" ? "Посадка" : "Отыру", {
+        .bindTooltip(locale === "ru" ? "Посадка" : locale === "kk" ? "Отыру" : "Boarding", {
           direction: "top",
           offset: [0, -8],
         });
@@ -362,7 +380,7 @@ export default function OutdoorMap({
           fillOpacity: 1,
         })
         .addTo(layer)
-        .bindTooltip(locale === "ru" ? "Выход" : "Түсу", {
+        .bindTooltip(locale === "ru" ? "Выход" : locale === "kk" ? "Түсу" : "Exit", {
           direction: "top",
           offset: [0, -8],
         });
@@ -392,15 +410,15 @@ export default function OutdoorMap({
           .addTo(layer)
           .bindPopup(`
             <div style="font-family:Inter,system-ui,sans-serif;min-width:160px;">
-              <div style="font-size:13px;font-weight:700;">${escapeHtml(locale === "ru" ? "Маршрут" : "Маршрут")}: ${escapeHtml(option.firstRouteNumber)}</div>
+              <div style="font-size:13px;font-weight:700;">${escapeHtml(locale === "en" ? "Route" : "Маршрут")}: ${escapeHtml(option.firstRouteNumber)}</div>
               <div style="margin-top:4px;font-size:12px;color:#334155;">
-                ${escapeHtml(locale === "ru" ? "Автобус" : "Автобус")}: ${escapeHtml(bus.label)}
+                ${escapeHtml(locale === "en" ? "Bus" : "Автобус")}: ${escapeHtml(bus.label)}
               </div>
               <div style="margin-top:4px;font-size:12px;color:#64748b;">
-                ${bus.offline ? (locale === "ru" ? "Оффлайн" : "Оффлайн") : locale === "ru" ? "На линии" : "Желіде"}
+                ${bus.offline ? (locale === "en" ? "Offline" : "Оффлайн") : locale === "ru" ? "На линии" : locale === "kk" ? "Желіде" : "Online"}
               </div>
               <div style="margin-top:4px;font-size:12px;color:#334155;">
-                ${locale === "ru" ? "Скорость" : "Жылдамдық"}: ${Math.round(bus.speed)} км/ч
+                ${locale === "ru" ? "Скорость" : locale === "kk" ? "Жылдамдық" : "Speed"}: ${Math.round(bus.speed)} ${locale === "en" ? "km/h" : "км/ч"}
               </div>
             </div>
           `);
@@ -430,12 +448,17 @@ export default function OutdoorMap({
     return () => {
       cancelled = true;
     };
-  }, [locale, transitOverlay, userLat, userLng]);
+  }, [globalMapProvider, locale, mapReadyKey, transitOverlay, userLat, userLng]);
 
   return (
     <div
       ref={containerRef}
-      className="h-full w-full rounded-[28px]"
+      className={[
+        "h-full w-full rounded-[28px]",
+        mapStyle === "dark" && globalMapProvider !== "osm"
+          ? "leaflet-filtered-dark-map"
+          : "",
+      ].join(" ")}
       role="application"
       aria-label="Outdoor map with university campus locations"
     />
@@ -447,22 +470,22 @@ function buildPopup(site: CampusSite, locale: Locale, externalMapService: Extern
   const links = (site.photoLinks ?? [])
     .map(
       (link) =>
-        `<a href="${link.url}" target="_blank" rel="noreferrer" style="display:inline-flex;align-items:center;justify-content:center;padding:8px 10px;border-radius:12px;background:#f4f7fb;color:#0f172a;text-decoration:none;font-size:12px;font-weight:600;">${escapeHtml(
+        `<a href="${link.url}" target="_blank" rel="noreferrer" style="display:inline-flex;align-items:center;justify-content:center;padding:8px 10px;border-radius:12px;background:hsl(var(--muted));color:hsl(var(--foreground));text-decoration:none;font-size:12px;font-weight:600;">${escapeHtml(
           text(link.label, locale)
         )}</a>`
     )
     .join("");
   const openInLink = externalMapUrl
-    ? `<a href="${externalMapUrl}" target="_blank" rel="noreferrer" style="display:inline-flex;align-items:center;justify-content:center;padding:8px 10px;border-radius:12px;background:#0f172a;color:#ffffff;text-decoration:none;font-size:12px;font-weight:600;">${escapeHtml(
+    ? `<a href="${externalMapUrl}" target="_blank" rel="noreferrer" style="display:inline-flex;align-items:center;justify-content:center;padding:8px 10px;border-radius:12px;background:hsl(var(--foreground));color:hsl(var(--background));text-decoration:none;font-size:12px;font-weight:600;">${escapeHtml(
         getOpenInLabel(externalMapService, locale)
       )}</a>`
     : "";
 
   return `
     <div style="width:260px;padding:4px 2px;font-family:Inter,system-ui,sans-serif;">
-      <div style="font-size:14px;font-weight:700;color:#0f172a;">${escapeHtml(text(site.name, locale))}</div>
-      <div style="margin-top:6px;font-size:12px;line-height:1.45;color:#64748b;">${escapeHtml(text(site.address, locale))}</div>
-      <div style="margin-top:8px;font-size:12px;line-height:1.5;color:#334155;">${escapeHtml(text(site.description, locale))}</div>
+      <div style="font-size:14px;font-weight:700;color:hsl(var(--foreground));">${escapeHtml(text(site.name, locale))}</div>
+      <div style="margin-top:6px;font-size:12px;line-height:1.45;color:hsl(var(--muted-foreground));">${escapeHtml(text(site.address, locale))}</div>
+      <div style="margin-top:8px;font-size:12px;line-height:1.5;color:hsl(var(--foreground));">${escapeHtml(text(site.description, locale))}</div>
       ${links || openInLink ? `<div style="margin-top:10px;display:flex;flex-wrap:wrap;gap:6px;">${openInLink}${links}</div>` : ""}
     </div>`;
 }
@@ -505,16 +528,46 @@ function getSiteColor(kind: CampusSite["kind"]) {
   return "hsl(220 16% 42%)";
 }
 
-function getTileLayerConfig(mapStyle: ResolvedOutdoorMapStyle) {
+function getTileLayerConfig(
+  mapStyle: ResolvedOutdoorMapStyle,
+  globalMapProvider: GlobalMapProvider
+) {
   const openStreetMapAttribution =
     '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors';
 
-  if (mapStyle === "dark") {
+  if (globalMapProvider === "google") {
     return {
-      url: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
-      attribution: openStreetMapAttribution,
+      url: "https://{s}.google.com/vt/lyrs=m&x={x}&y={y}&z={z}",
+      attribution: "&copy; Google Maps",
+      maxZoom: 20,
+      subdomains: ["mt0", "mt1", "mt2", "mt3"],
+    };
+  }
+
+  if (globalMapProvider === "2gis") {
+    return {
+      url: "https://tile{s}.maps.2gis.com/tiles?x={x}&y={y}&z={z}",
+      attribution: "&copy; 2GIS",
+      maxZoom: 18,
+      subdomains: ["0", "1", "2", "3"],
+    };
+  }
+
+  if (globalMapProvider === "yandex") {
+    return {
+      url: "https://core-renderer-tiles.maps.yandex.net/tiles?l=map&x={x}&y={y}&z={z}&scale=1&lang=ru_RU",
+      attribution: "&copy; Yandex Maps",
       maxZoom: 19,
       subdomains: "abc",
+    };
+  }
+
+  if (mapStyle === "dark") {
+    return {
+      url: "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",
+      attribution: `${openStreetMapAttribution}, &copy; <a href="https://carto.com/attributions">CARTO</a>`,
+      maxZoom: 19,
+      subdomains: ["a", "b", "c", "d"],
     };
   }
 

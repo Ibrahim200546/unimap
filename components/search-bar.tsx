@@ -30,6 +30,12 @@ const SEARCH_COPY = {
     empty: "Ештеңе табылмады. Аудитория нөмірін немесе сервис атауын қолданып көріңіз.",
     clear: "Іздеуді тазарту",
   },
+  en: {
+    placeholder: "Find a room, cafeteria, or service...",
+    aria: "Campus search",
+    empty: "Nothing found. Try a room number or service name.",
+    clear: "Clear search",
+  },
 } as const;
 
 export default function SearchBar({ locale, onSelect }: SearchBarProps) {

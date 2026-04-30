@@ -45,6 +45,23 @@ const SCHEDULE_COPY = {
       meeting: "Онлайн",
     },
   },
+  en: {
+    title: "Schedule",
+    subtitle: "Current student schedule in table format.",
+    count: "Lessons",
+    online: "Link",
+    columns: {
+      id: "No.",
+      day: "Day",
+      lessonNumber: "Class",
+      time: "Time",
+      subject: "Subject",
+      lessonType: "Type",
+      teacher: "Teacher",
+      room: "Room",
+      meeting: "Online",
+    },
+  },
 } as const;
 
 export default function StudentSchedulePanel({ locale }: StudentSchedulePanelProps) {

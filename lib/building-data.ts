@@ -540,22 +540,26 @@ export function getFloorLabel(floorId: number, locale: Locale): string {
     return `${floorId}-қабат`;
   }
 
+  if (locale === "en") {
+    return `Floor ${floorId}`;
+  }
+
   return `${floorId} этаж`;
 }
 
 export function getRoomTypeLabel(type: RoomType, locale: Locale): string {
   const labels: Record<RoomType, LocalizedText> = {
-    classroom: { ru: "Аудитория", kk: "Аудитория" },
-    office: { ru: "Офис", kk: "Кеңсе" },
-    restroom: { ru: "Санузел", kk: "Дәретхана" },
-    stairs: { ru: "Лестница", kk: "Баспалдақ" },
-    entrance: { ru: "Вход", kk: "Кіру" },
-    corridor: { ru: "Коридор", kk: "Дәліз" },
-    library: { ru: "Библиотека", kk: "Кітапхана" },
-    cafeteria: { ru: "Столовая", kk: "Асхана" },
-    lab: { ru: "Лаборатория", kk: "Зертхана" },
-    service: { ru: "Сервис", kk: "Қызмет" },
-    elevator: { ru: "Лифт", kk: "Лифт" },
+    classroom: { ru: "Аудитория", kk: "Аудитория", en: "Classroom" },
+    office: { ru: "Офис", kk: "Кеңсе", en: "Office" },
+    restroom: { ru: "Санузел", kk: "Дәретхана", en: "Restroom" },
+    stairs: { ru: "Лестница", kk: "Баспалдақ", en: "Stairs" },
+    entrance: { ru: "Вход", kk: "Кіру", en: "Entrance" },
+    corridor: { ru: "Коридор", kk: "Дәліз", en: "Corridor" },
+    library: { ru: "Библиотека", kk: "Кітапхана", en: "Library" },
+    cafeteria: { ru: "Столовая", kk: "Асхана", en: "Cafeteria" },
+    lab: { ru: "Лаборатория", kk: "Зертхана", en: "Lab" },
+    service: { ru: "Сервис", kk: "Қызмет", en: "Service" },
+    elevator: { ru: "Лифт", kk: "Лифт", en: "Elevator" },
   };
 
   return text(labels[type], locale);
@@ -571,8 +575,10 @@ export function searchRooms(query: string): Room[] {
       room.label,
       room.name.ru,
       room.name.kk,
+      room.name.en,
       room.description?.ru,
       room.description?.kk,
+      room.description?.en,
       room.type,
       ...(room.keywords ?? []),
     ]
