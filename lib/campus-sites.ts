@@ -171,6 +171,99 @@ export const CAMPUS_SITES: CampusSite[] = [
       },
     ],
   },
+  {
+    id: "dormitory-1",
+    kind: "building",
+    name: {
+      ru: "Общежитие 1",
+      kk: "1 жатақхана",
+      en: "Dormitory 1",
+    },
+    address: {
+      ru: "Талдыкорган, общежитие 1",
+      kk: "Талдықорған, 1 жатақхана",
+      en: "Taldykorgan, Dormitory 1",
+    },
+    description: {
+      ru: "Студенческое общежитие №1 Жетісуского университета.",
+      kk: "Жетісу университетінің №1 студенттік жатақханасы.",
+      en: "Zhetysu University student dormitory No. 1.",
+    },
+    lat: 45.010267,
+    lng: 78.353745,
+    photoLinks: [
+      {
+        label: {
+          ru: "Галерея",
+          kk: "Галерея",
+          en: "Gallery",
+        },
+        url: "https://yandex.kz/maps/?ll=78.353745%2C45.010267&z=18&mode=search&text=%D0%9E%D0%B1%D1%89%D0%B5%D0%B6%D0%B8%D1%82%D0%B8%D0%B5%201",
+      },
+    ],
+  },
+  {
+    id: "dormitory-2",
+    kind: "building",
+    name: {
+      ru: "Общежитие 2",
+      kk: "2 жатақхана",
+      en: "Dormitory 2",
+    },
+    address: {
+      ru: "Талдыкорган, общежитие 2",
+      kk: "Талдықорған, 2 жатақхана",
+      en: "Taldykorgan, Dormitory 2",
+    },
+    description: {
+      ru: "Студенческое общежитие №2 Жетісуского университета.",
+      kk: "Жетісу университетінің №2 студенттік жатақханасы.",
+      en: "Zhetysu University student dormitory No. 2.",
+    },
+    lat: 45.003939,
+    lng: 78.363339,
+    photoLinks: [
+      {
+        label: {
+          ru: "Галерея",
+          kk: "Галерея",
+          en: "Gallery",
+        },
+        url: "https://yandex.kz/maps/?ll=78.363339%2C45.003939&z=18&mode=search&text=%D0%9E%D0%B1%D1%89%D0%B5%D0%B6%D0%B8%D1%82%D0%B8%D0%B5%202",
+      },
+    ],
+  },
+  {
+    id: "dormitory-3",
+    kind: "building",
+    name: {
+      ru: "Общежитие 3",
+      kk: "3 жатақхана",
+      en: "Dormitory 3",
+    },
+    address: {
+      ru: "Талдыкорган, общежитие 3",
+      kk: "Талдықорған, 3 жатақхана",
+      en: "Taldykorgan, Dormitory 3",
+    },
+    description: {
+      ru: "Студенческое общежитие №3 Жетісуского университета.",
+      kk: "Жетісу университетінің №3 студенттік жатақханасы.",
+      en: "Zhetysu University student dormitory No. 3.",
+    },
+    lat: 45.020437,
+    lng: 78.395984,
+    photoLinks: [
+      {
+        label: {
+          ru: "Галерея",
+          kk: "Галерея",
+          en: "Gallery",
+        },
+        url: "https://yandex.kz/maps/?ll=78.395984%2C45.020437&z=18&mode=search&text=%D0%9E%D0%B1%D1%89%D0%B5%D0%B6%D0%B8%D1%82%D0%B8%D0%B5%203",
+      },
+    ],
+  },
 ];
 
 export function getCampusSiteById(siteId: string) {
